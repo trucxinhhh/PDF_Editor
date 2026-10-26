@@ -432,6 +432,26 @@ def health():
                     "libreoffice": find_soffice()})
 
 
+def lan_addresses():
+    """Các địa chỉ IPv4 trong mạng nội bộ của máy này."""
+    import socket
+    ips = []
+    try:  # địa chỉ của card mạng đang dùng (không gửi dữ liệu đi đâu)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ips.append(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+    try:
+        for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if ip not in ips:
+                ips.append(ip)
+    except Exception:
+        pass
+    return [ip for ip in ips if not ip.startswith("127.") and not ip.startswith("169.254.")]
+
+
 if __name__ == "__main__":
     maybe_cleanup()
     host = os.environ.get("HOST", "127.0.0.1")
@@ -440,4 +460,11 @@ if __name__ == "__main__":
     if "--no-browser" not in sys.argv and not os.environ.get("NO_BROWSER"):
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     print("PDF Editor đang chạy tại", url, "(Ctrl+C để dừng)")
+    if host in ("0.0.0.0", "::"):
+        ips = lan_addresses()
+        if ips:
+            print("Các máy khác trong mạng nội bộ truy cập bằng:")
+            for ip in ips:
+                print("    http://%s:%d" % (ip, port))
+        print("(Nếu máy khác không vào được: chạy lan-setup.bat để mở tường lửa cổng %d)" % port)
     app.run(host=host, port=port, debug=False, threaded=True)

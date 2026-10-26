@@ -29,8 +29,11 @@ if not exist ".venv\installed.flag" (
   echo ok> ".venv\installed.flag"
 )
 
+rem HOST=0.0.0.0: cho phep cac may khac trong mang noi bo truy cap
+rem (doi thanh 127.0.0.1 neu chi muon dung tren may nay)
+set HOST=0.0.0.0
 echo.
-echo  PDF Editor: http://127.0.0.1:5000   (dong cua so nay de tat)
+echo  PDF Editor dang chay. Dong cua so nay de tat.
 echo.
 ".venv\Scripts\python.exe" app.py
 pause

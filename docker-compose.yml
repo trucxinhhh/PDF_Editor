@@ -9,8 +9,9 @@ services:
     image: pdf-editor:latest
     container_name: pdf-editor
     ports:
-      # Chỉ máy này truy cập được. Muốn máy khác trong mạng LAN dùng: đổi thành "5000:5000"
-      - "127.0.0.1:5000:5000"
+      # Mọi máy trong mạng nội bộ (LAN) truy cập được qua http://<IP-máy-này>:5000
+      # Muốn chỉ riêng máy này dùng: đổi thành "127.0.0.1:5000:5000"
+      - "5000:5000"
     environment:
       KEEP_HOURS: "24"          # file tạm trên server tự xoá sau N giờ
       GUNICORN_WORKERS: "2"

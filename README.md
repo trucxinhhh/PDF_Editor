@@ -31,7 +31,7 @@ Mở một file PDF và bạn có thể:
 docker compose up -d --build
 ```
 
-Mở trình duyệt: **http://localhost:5000**
+Mở trình duyệt: **http://localhost:5000** trên chính máy này. Các máy khác trong mạng nội bộ dùng **http://\<IP-máy-này\>:5000** (xem mục *Dùng chung trong mạng nội bộ* bên dưới).
 
 | Việc cần làm | Lệnh |
 |---|---|
@@ -48,7 +48,7 @@ Mở trình duyệt: **http://localhost:5000**
 docker build -t pdf-editor .
 
 # Chạy container
-docker run -d --name pdf-editor -p 127.0.0.1:5000:5000 -v pdf-data:/data --restart unless-stopped pdf-editor
+docker run -d --name pdf-editor -p 5000:5000 -v pdf-data:/data --restart unless-stopped pdf-editor
 ```
 
 Dừng và xoá: `docker stop pdf-editor && docker rm pdf-editor`
@@ -62,13 +62,33 @@ docker build --build-arg WITH_LIBREOFFICE=false -t pdf-editor .
 ```
 (hoặc sửa `WITH_LIBREOFFICE: "false"` trong `docker-compose.yml`)
 
-### Cho máy khác trong mạng LAN dùng
+### Dùng chung trong mạng nội bộ (LAN)
 
-Mặc định chỉ chính máy chạy Docker truy cập được (`127.0.0.1`). Muốn các máy khác cũng dùng được:
-- Trong `docker-compose.yml`, đổi `"127.0.0.1:5000:5000"` thành `"5000:5000"`
-- Truy cập bằng `http://<IP-máy-chạy-docker>:5000`
+Mặc định app mở cho **mọi máy cùng mạng nội bộ** (cùng Wi-Fi / mạng LAN công ty) truy cập. Máy khác không cần cài gì, chỉ cần trình duyệt. Mỗi người mở file riêng và chỉnh sửa độc lập, không ảnh hưởng nhau.
 
-> App không có đăng nhập, nên đừng mở ra Internet công cộng. Nếu cần, hãy đặt sau reverse proxy có xác thực (Nginx, Caddy, Traefik…).
+**Thiết lập 1 lần trên máy chạy PDF Editor (Windows):**
+1. Nhấp đúp **`lan-setup.bat`**, rồi bấm *Yes* khi Windows hỏi quyền Administrator. Script sẽ:
+   - mở tường lửa Windows cho cổng 5000;
+   - nếu mạng đang ở chế độ *Public*, hỏi để chuyển sang *Private* (Windows chặn kết nối từ máy khác khi mạng ở chế độ Public);
+   - in ra địa chỉ để các máy khác truy cập, ví dụ `http://192.168.1.15:5000`.
+2. Gửi địa chỉ đó cho mọi người. Họ mở bằng Chrome, Edge, Firefox… trên máy tính, điện thoại hoặc máy tính bảng cùng mạng.
+
+**Tự tìm địa chỉ IP** (nếu không dùng script): mở PowerShell gõ `ipconfig`, lấy dòng **IPv4 Address** của card Wi-Fi hoặc Ethernet (thường dạng `192.168.x.x` hoặc `10.x.x.x`). Bỏ qua các card tên *vEthernet / WSL*.
+
+**Nên đặt IP cố định** cho máy chạy PDF Editor (trong router, mục DHCP reservation, hoặc trong cài đặt card mạng). Nếu không, địa chỉ có thể đổi sau khi khởi động lại máy.
+
+**Không truy cập được từ máy khác?**
+- Trên chính máy chủ, http://localhost:5000 phải mở được trước. Nếu không mở được thì app chưa chạy.
+- Hai máy phải cùng một mạng. Wi-Fi khách (guest) thường chặn các máy nói chuyện với nhau.
+- Chạy lại `lan-setup.bat`. Nếu dùng phần mềm diệt virus có tường lửa riêng (Kaspersky, ESET…), cho phép cổng 5000 trong phần mềm đó.
+- Một số VPN chặn mạng nội bộ khi đang bật.
+
+**Chỉ muốn dùng trên một máy:** trong `docker-compose.yml` đổi `"5000:5000"` thành `"127.0.0.1:5000:5000"`. Nếu chạy bằng run.bat thì sửa dòng `set HOST=0.0.0.0` thành `set HOST=127.0.0.1`.
+
+**Đóng tường lửa lại:** chạy lệnh sau trong PowerShell (Administrator):
+`netsh advfirewall firewall delete rule name="PDF Editor (TCP 5000)"`
+
+> App không có đăng nhập: ai trong mạng nội bộ cũng dùng được. Chỉ dùng trong mạng tin cậy (nhà, công ty) và **không** mở cổng ra Internet (port forwarding trên router).
 
 ### Cấu hình (biến môi trường)
 
@@ -80,7 +100,7 @@ Mặc định chỉ chính máy chạy Docker truy cập được (`127.0.0.1`).
 | `GUNICORN_THREADS` | `4` | Số luồng mỗi tiến trình |
 | `WORK_DIR` | `/data/uploads` | Thư mục lưu file tạm (nằm trong volume `pdf-data`) |
 
-Đổi cổng ra ngoài, ví dụ dùng cổng 8080: `-p 127.0.0.1:8080:5000`
+Đổi cổng ra ngoài, ví dụ dùng cổng 8080: sửa `"5000:5000"` thành `"8080:5000"` (khi đó sửa `PORT=5000` trong `lan-setup.bat` thành `8080`).
 
 ### Font chữ
 
@@ -119,7 +139,7 @@ Máy không kết nối được Docker Hub để tải image gốc `python`. Đ
 
 ## 2. Chạy trực tiếp, không cần Docker
 
-**Windows:** nhấp đúp `run.bat`. Lần đầu nó tự tạo `.venv` và cài thư viện (cần mạng), sau đó tự mở trình duyệt.
+**Windows:** nhấp đúp `run.bat`. Lần đầu nó tự tạo `.venv` và cài thư viện (cần mạng), sau đó tự mở trình duyệt. Cửa sổ dòng lệnh sẽ in địa chỉ cho các máy khác trong mạng nội bộ. Nhớ chạy `lan-setup.bat` 1 lần để mở tường lửa (xem mục *Dùng chung trong mạng nội bộ*).
 Yêu cầu: Python 3.9+ (https://www.python.org/downloads/, khi cài nhớ tick “Add python.exe to PATH”).
 
 **macOS / Linux:** `bash run.sh`
@@ -201,6 +221,7 @@ PDF_Editor/
 ├── docker-compose.yml
 ├── .dockerignore
 ├── run.bat              Chạy trên Windows, không cần Docker
+├── lan-setup.bat        Mở tường lửa cổng 5000 cho mạng nội bộ, in địa chỉ truy cập
 └── run.sh               Chạy trên macOS/Linux, không cần Docker
 ```
 

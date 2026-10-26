@@ -1,9 +1,13 @@
 # ---------------------------------------------------------------
 # PDF Editor - Docker image
 #   docker build -t pdf-editor .
-#   docker run -d -p 127.0.0.1:5000:5000 --name pdf-editor pdf-editor
+#   docker run -d -p 5000:5000 --name pdf-editor pdf-editor
 # ---------------------------------------------------------------
-FROM python:3.12-slim-bookworm
+
+# Image gốc. Nếu không kết nối được Docker Hub, đổi sang bản mirror của Google:
+#   --build-arg BASE_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm
+ARG BASE_IMAGE=python:3.12-slim-bookworm
+FROM ${BASE_IMAGE}
 
 # true  = cài LibreOffice để dùng chức năng Word (.docx) -> PDF (image ~ +400MB)
 # false = image nhỏ gọn, mọi chức năng khác vẫn chạy

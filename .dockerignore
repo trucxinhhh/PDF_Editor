@@ -11,3 +11,4 @@ run.sh
 Dockerfile
 docker-compose.yml
 .dockerignore
+lan-setup.bat
