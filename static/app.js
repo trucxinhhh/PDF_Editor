@@ -19,12 +19,28 @@ const state = {
   undo: [], redo: [], clip: null, pendingImage: null, dirty: false,
   defaults: {
     text: { color: '#000000', size: 14, font: 'sans', bold: false },
-    highlight: { color: '#ffeb3b', opacity: 0.4 },
+    highlight: { color: '#ffeb3b', opacity: 0.4, style: 'highlight', mode: 'line' },
     whiteout: { color: '#ffffff' },
     comment: { color: '#ffd23f' },
+    shape: { kind: 'rect', color: '#e53935', fill: null, width: 2, opacity: 1 },
     edit: { whiteBg: false },
   },
 };
+
+/* Bảng màu gợi ý theo loại đối tượng */
+const PALETTES = {
+  text: ['#000000', '#616161', '#ffffff', '#e53935', '#d81b60', '#8e24aa', '#3949ab', '#1e88e5', '#00897b', '#43a047', '#f9a825', '#fb8c00'],
+  highlight: ['#ffeb3b', '#ffd54f', '#c5e1a5', '#80deea', '#90caf9', '#f48fb1', '#ce93d8', '#ffab91', '#ff5252', '#b0bec5'],
+  whiteout: ['#ffffff', '#000000', '#f5f5f5', '#fafafa', '#fff8e1', '#eceff1'],
+  comment: ['#ffd23f', '#ffab91', '#a5d6a7', '#81d4fa', '#ce93d8', '#f48fb1'],
+  fill: [null, '#ffffff', '#000000', '#fff59d', '#ffcdd2', '#c8e6c9', '#bbdefb', '#e1bee7', '#ffe0b2', '#eeeeee'],
+};
+PALETTES.edit = PALETTES.text;
+PALETTES.shape = PALETTES.text;
+const KIND_LABEL = { text: 'Văn bản', edit: 'Sửa chữ gốc', highlight: 'Highlight', whiteout: 'Che vùng', comment: 'Chú thích',
+  shape: 'Hình', image: 'Ảnh' };
+const SHAPE_LABEL = { rect: 'Hình chữ nhật', ellipse: 'Hình elip', line: 'Đường thẳng', arrow: 'Mũi tên', pen: 'Bút vẽ' };
+const measureCtx = document.createElement('canvas').getContext('2d');
 const els = new Map();   // ann.id -> element
 let observer = null;
 let uid = Date.now();
@@ -34,7 +50,8 @@ const HINTS = {
   select: 'Chọn: bấm vào đối tượng để chọn/kéo, nhấp đúp vào chữ để sửa. Bôi đen chữ trong PDF để copy (Ctrl+C).',
   text: 'Văn bản: bấm vào vị trí trên trang rồi gõ chữ. Enter để xuống dòng, Esc để xong.',
   image: 'Ảnh: chọn file ảnh rồi bấm vào trang để đặt. Có thể dán ảnh trực tiếp bằng Ctrl+V.',
-  highlight: 'Highlight: kéo chuột để tô vùng. Mẹo: bôi đen chữ ở chế độ Chọn rồi bấm nút Highlight.',
+  highlight: 'Highlight: kéo trên chữ để tô theo dòng (tự bắt theo từng ký tự), bấm 1 lần vào dòng để tô cả dòng. Kéo ở vùng trống để tô vùng tự do.',
+  shape: 'Hình: chọn loại hình ở thanh bên dưới rồi kéo chuột trên trang. Giữ Shift để vẽ hình vuông/tròn hoặc đường thẳng góc 45°.',
   whiteout: 'Che vùng: kéo chuột để che nội dung (đổi màu ở ô Màu).',
   comment: 'Chú thích: bấm vào trang để thêm ghi chú (sticky note, hiện trong Acrobat/Foxit).',
   edit: 'Sửa chữ gốc: bấm vào một dòng chữ có khung xanh để sửa trực tiếp nội dung đó.',
@@ -95,6 +112,8 @@ async function openPdfBytes(bytes, name, anns = []) {
     const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
     try { state.pdf && (state.pdf.loadingTask ? state.pdf.loadingTask.destroy() : state.pdf.cleanup()); } catch (_) {}
     Object.assign(state, { docId: info.id, name, bytes, pdf, anns, pages: [], sel: null, editing: null, undo: [], redo: [], dirty: false });
+    $('#scanBanner').hidden = true;
+    notifyScanned._shown = false;
     document.title = name + ' – PDF Editor';
     document.body.classList.add('has-doc');
     await buildPages();
@@ -155,7 +174,7 @@ async function buildPages() {
       `<div class="page-num">${i + 1} / ${state.pdf.numPages}</div>`;
     const p = { index: i, w, h, el, canvas: el.querySelector('canvas'), textLayer: el.querySelector('.textLayer'),
       overlay: el.querySelector('.overlay'), hits: el.querySelector('.hits'),
-      items: old[i] ? old[i].items : null, rendered: false, rendering: null };
+      items: old[i] ? old[i].items : null, scanned: old[i] ? old[i].scanned : false, rendered: false, rendering: null };
     p.overlay.addEventListener('pointerdown', (e) => onOverlayDown(e, p));
     p.textLayer.addEventListener('mousedown', () => p.textLayer.classList.add('selecting'));
     container.appendChild(el);
@@ -187,7 +206,12 @@ async function renderPage(p) {
     p.textLayer.innerHTML = '';
     await new pdfjsLib.TextLayer({ textContentSource: tc, container: p.textLayer, viewport: vp }).render();
     const eoc = document.createElement('div'); eoc.className = 'endOfContent'; p.textLayer.appendChild(eoc);
-    if (!p.items) p.items = extractItems(page, tc);
+    if (!p.items) {
+      p.items = extractItems(page, tc);
+      // trang không có chữ thật nhưng có hình ảnh -> PDF dạng ảnh scan
+      p.scanned = !p.items.length && tc.items.every((it) => !it.str || !it.str.trim());
+      if (p.scanned) notifyScanned(p, 'open');
+    }
     buildHits(p);
     p.rendered = true;
   })().catch((e) => console.error('render page', p.index, e)).finally(() => (p.rendering = null));
@@ -215,6 +239,23 @@ function extractItems(page, tc) {
   return out;
 }
 
+function itemBox(it) {
+  return { x: it.x - 1, y: it.baseline - it.size * 0.9, w: it.w + 2, h: it.size * 1.15 };
+}
+
+/* =========================================================== PDF ảnh scan: chỉ thông báo */
+function scannedPages() { return state.pages.filter((p) => p.scanned); }
+function notifyScanned(p, reason) {
+  if (reason === 'open' && notifyScanned._shown) return;
+  notifyScanned._shown = true;
+  const where = state.pages.length === 1 || reason === 'open' ? 'PDF này' : `Trang ${p.index + 1}`;
+  const what = reason === 'highlight' ? 'Highlight chỉ tô được theo vùng tự do (không tô theo dòng chữ).'
+    : `Không thể dùng “Sửa chữ gốc” hay bôi đen để copy chữ trên ${reason === 'open' && state.pages.length > 1 ? 'những trang đó' : 'trang này'}.`;
+  $('#scanBannerText').textContent = `${where} ${reason === 'open' && state.pages.length > 1 ? 'có trang ' : ''}là ảnh scan (chỉ có hình ảnh, không có chữ thật). ${what} ` +
+    'Bạn vẫn có thể thêm văn bản, ảnh, hình vẽ, che vùng và chú thích như bình thường.';
+  $('#scanBanner').hidden = false;
+}
+
 function buildHits(p) {
   p.hits.innerHTML = '';
   const s = state.scale;
@@ -222,10 +263,11 @@ function buildHits(p) {
     const d = document.createElement('div');
     d.className = 'hit';
     d.title = it.str;
-    d.style.left = (it.x - 1) * s + 'px';
-    d.style.top = (it.baseline - it.size * 0.9) * s + 'px';
-    d.style.width = (it.w + 2) * s + 'px';
-    d.style.height = it.size * 1.15 * s + 'px';
+    const r = itemBox(it);
+    d.style.left = r.x * s + 'px';
+    d.style.top = r.y * s + 'px';
+    d.style.width = r.w * s + 'px';
+    d.style.height = r.h * s + 'px';
     d.dataset.key = it.key;
     p.hits.appendChild(d);
   }
@@ -309,13 +351,96 @@ function updateAnnEl(a) {
     el.style.height = a.h * s + 'px';
   }
   if (a.type === 'image') { const img = el.querySelector('img'); if (img.getAttribute('src') !== a.src) img.src = a.src; }
-  if (a.type === 'highlight') { el.style.background = a.color; el.style.opacity = a.opacity; }
+  if (a.type === 'highlight') renderHighlight(el, a);
+  if (a.type === 'shape') renderShape(el, a);
   if (a.type === 'whiteout') el.style.background = a.color;
   if (a.type === 'comment') {
     el.style.width = ''; el.style.height = '';
     el.querySelector('.icon').style.background = a.color;
     const ta = el.querySelector('textarea'); if (document.activeElement !== ta) ta.value = a.text || '';
   }
+}
+
+/* ---- highlight nhiều vùng (theo dòng) */
+function hlRects(a) { return a.rects && a.rects.length ? a.rects : [{ x: a.x, y: a.y, w: a.w, h: a.h }]; }
+function renderHighlight(el, a) {
+  const s = state.scale;
+  const style = a.style || 'highlight';
+  el.querySelectorAll('.hl').forEach((x) => x.remove());
+  el.style.background = 'transparent';
+  el.style.opacity = style === 'highlight' ? a.opacity : 1;
+  el.style.mixBlendMode = style === 'highlight' ? 'multiply' : 'normal';
+  const frag = document.createDocumentFragment();
+  for (const r of hlRects(a)) {
+    const d = document.createElement('div');
+    d.className = 'hl';
+    let top = r.y, h = r.h;
+    if (style === 'underline') { h = Math.max(0.8, r.h * 0.07); top = r.y + r.h - h * 1.6; }
+    else if (style === 'strike') { h = Math.max(0.8, r.h * 0.07); top = r.y + r.h * 0.52 - h / 2; }
+    Object.assign(d.style, { left: (r.x - a.x) * s + 'px', top: (top - a.y) * s + 'px', width: r.w * s + 'px',
+      height: Math.max(h * s, 1) + 'px', background: a.color });
+    frag.appendChild(d);
+  }
+  el.insertBefore(frag, el.firstChild);
+}
+function bboxOfRects(rects) {
+  const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
+  const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/* ---- hình vẽ */
+function arrowHead(p1, p2, sw) {
+  const L = Math.max(8, sw * 4), hw = L * 0.45;
+  const dx = p2[0] - p1[0], dy = p2[1] - p1[1], len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  const l = Math.min(L, len * 0.9);
+  const bx = p2[0] - ux * l, by = p2[1] - uy * l;
+  return { base: [bx, by], pts: [p2, [bx - uy * hw * (l / L), by + ux * hw * (l / L)], [bx + uy * hw * (l / L), by - ux * hw * (l / L)]] };
+}
+function shapeBBox(a) {   // khung bao cho line/arrow/pen từ các điểm
+  const xs = a.pts.map((p) => p[0]), ys = a.pts.map((p) => p[1]);
+  const pad = a.width / 2 + (a.kind === 'arrow' ? Math.max(8, a.width * 4) * 0.5 : 0) + 3;
+  const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad;
+  a.x = x0; a.y = y0; a.w = Math.max(...xs) + pad - x0; a.h = Math.max(...ys) + pad - y0;
+}
+function renderShape(el, a) {
+  const w = Math.max(a.w, 0.1), h = Math.max(a.h, 0.1), sw = +a.width || 0;
+  const stroke = sw > 0 ? `stroke="${a.color}" stroke-width="${sw}"` : 'stroke="none"';
+  let body = '';
+  if (a.kind === 'rect') {
+    body = `<rect x="${sw / 2}" y="${sw / 2}" width="${Math.max(w - sw, 0.1)}" height="${Math.max(h - sw, 0.1)}" fill="${a.fill || 'none'}" ${stroke}/>`;
+  } else if (a.kind === 'ellipse') {
+    body = `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${Math.max(w / 2 - sw / 2, 0.1)}" ry="${Math.max(h / 2 - sw / 2, 0.1)}" fill="${a.fill || 'none'}" ${stroke}/>`;
+  } else if (a.pts && a.pts.length) {
+    const rel = a.pts.map(([x, y]) => [x - a.x, y - a.y]);
+    if (a.kind === 'pen') {
+      body = `<polyline points="${rel.map((p) => p.join(',')).join(' ')}" fill="none" ${stroke}/>`;
+    } else {
+      let [p1, p2] = [rel[0], rel[rel.length - 1]];
+      if (a.kind === 'arrow') {
+        const head = arrowHead(p1, p2, sw);
+        body = `<line x1="${p1[0]}" y1="${p1[1]}" x2="${head.base[0]}" y2="${head.base[1]}" ${stroke}/>` +
+          `<polygon points="${head.pts.map((p) => p.join(',')).join(' ')}" fill="${a.color}"/>`;
+      } else body = `<line x1="${p1[0]}" y1="${p1[1]}" x2="${p2[0]}" y2="${p2[1]}" ${stroke}/>`;
+    }
+  }
+  let svg = el.querySelector('svg');
+  if (!svg) { el.insertAdjacentHTML('afterbegin', '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none"></svg>'); svg = el.querySelector('svg'); }
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.style.opacity = a.opacity ?? 1;
+  svg.innerHTML = `<g stroke-linecap="round" stroke-linejoin="round">${body}</g>`;
+}
+
+/* ---- dịch chuyển / co giãn chung cho mọi loại */
+function shiftAnn(a, dx, dy) {
+  a.x += dx; a.y += dy;
+  if (a.pts) a.pts = a.pts.map(([x, y]) => [x + dx, y + dy]);
+  if (a.rects) a.rects = a.rects.map((r) => ({ ...r, x: r.x + dx, y: r.y + dy }));
+}
+function scaleGeom(a, orig, kx, ky) {
+  if (orig.pts) a.pts = orig.pts.map(([x, y]) => [a.x + (x - a.x) * kx, a.y + (y - a.y) * ky]);
+  if (orig.rects) a.rects = orig.rects.map((r) => ({ x: a.x + (r.x - a.x) * kx, y: a.y + (r.y - a.y) * ky, w: r.w * kx, h: r.h * ky }));
 }
 
 function removeAnnEl(id) {
@@ -428,8 +553,7 @@ function startMove(e, el, a) {
     const dx = (ev.clientX - sx) / state.scale, dy = (ev.clientY - sy) / state.scale;
     if (!moved && Math.hypot(dx, dy) * state.scale < 3) return;
     moved = true;
-    a.x = clamp(ax + dx, -a.w + 5, p.w - 5);
-    a.y = clamp(ay + dy, -a.h + 5, p.h - 5);
+    shiftAnn(a, clamp(ax + dx, -a.w + 5, p.w - 5) - a.x, clamp(ay + dy, -a.h + 5, p.h - 5) - a.y);
     updateAnnEl(a);
   };
   const up = () => {
@@ -443,6 +567,7 @@ function startMove(e, el, a) {
 function startResize(e, el, a) {
   const sx = e.clientX, sy = e.clientY;
   const w0 = a.w, h0 = a.h, size0 = a.size;
+  const orig = { pts: a.pts, rects: a.rects };
   const snap = clone(state.anns);
   const handle = e.target;
   handle.setPointerCapture(e.pointerId);
@@ -456,9 +581,13 @@ function startResize(e, el, a) {
     } else if (a.type === 'image' && !ev.shiftKey) {
       const k = Math.max((w0 + dx) / w0, (h0 + dy) / h0, 8 / w0);
       a.w = w0 * k; a.h = h0 * k;
+    } else if (a.type === 'shape' && ev.shiftKey && (a.kind === 'rect' || a.kind === 'ellipse')) {
+      const k = Math.max((w0 + dx) / w0, (h0 + dy) / h0, 4 / w0);
+      a.w = w0 * k; a.h = h0 * k;
     } else {
       a.w = Math.max(4, w0 + dx); a.h = Math.max(3, h0 + dy);
     }
+    if (orig.pts || orig.rects) scaleGeom(a, orig, a.w / w0, a.h / h0);
     updateAnnEl(a);
   };
   const up = () => {
@@ -558,13 +687,184 @@ function onOverlayDown(e, p) {
     case 'edit': {
       const hit = e.target.closest('.hit');
       if (hit) createEditFromItem(p, hit.dataset.key);
+      else if (p.scanned) notifyScanned(p, 'action');
       break;
     }
     case 'highlight':
+      if (d.highlight.mode === 'line' && p.scanned) notifyScanned(p, 'highlight');
+      if (d.highlight.mode === 'line' && p.items && p.items.length) {
+        const loc = locateText(p, pt, true);
+        if (loc) { dragTextHighlight(e, p, loc); break; }
+      }
+      dragRect(e, p, pt);
+      break;
     case 'whiteout':
       dragRect(e, p, pt);
       break;
+    case 'shape':
+      drawShape(e, p, pt);
+      break;
   }
+}
+
+/* ---- vẽ hình */
+function drawShape(e, p, start) {
+  const d = state.defaults.shape;
+  const kind = d.kind;
+  const snap = clone(state.anns);
+  const a = { type: 'shape', kind, page: p.index, color: d.color, fill: kind === 'rect' || kind === 'ellipse' ? d.fill : null,
+    width: d.width, opacity: d.opacity, x: start.x, y: start.y, w: 0.1, h: 0.1 };
+  if (kind === 'line' || kind === 'arrow') a.pts = [[start.x, start.y], [start.x, start.y]];
+  if (kind === 'pen') a.pts = [[start.x, start.y]];
+  if (a.pts) shapeBBox(a);
+  addAnn(a, { history: false, selectIt: false });
+  p.overlay.setPointerCapture(e.pointerId);
+  const move = (ev) => {
+    const q = pagePoint(ev, p);
+    let cx = clamp(q.x, 0, p.w), cy = clamp(q.y, 0, p.h);
+    if (kind === 'rect' || kind === 'ellipse') {
+      let w = cx - start.x, h = cy - start.y;
+      if (ev.shiftKey) { const m = Math.max(Math.abs(w), Math.abs(h)); w = Math.sign(w || 1) * m; h = Math.sign(h || 1) * m; }
+      a.x = Math.min(start.x, start.x + w); a.y = Math.min(start.y, start.y + h); a.w = Math.abs(w); a.h = Math.abs(h);
+    } else if (kind === 'pen') {
+      const last = a.pts[a.pts.length - 1];
+      if (Math.hypot(cx - last[0], cy - last[1]) * state.scale < 2) return;
+      a.pts = [...a.pts, [cx, cy]];
+      shapeBBox(a);
+    } else {
+      if (ev.shiftKey) {   // bắt góc 45°
+        const ang = Math.round(Math.atan2(cy - start.y, cx - start.x) / (Math.PI / 4)) * (Math.PI / 4);
+        const len = Math.hypot(cx - start.x, cy - start.y);
+        cx = start.x + Math.cos(ang) * len; cy = start.y + Math.sin(ang) * len;
+      }
+      a.pts = [[start.x, start.y], [cx, cy]];
+      shapeBBox(a);
+    }
+    updateAnnEl(a);
+  };
+  const up = () => {
+    p.overlay.removeEventListener('pointermove', move); p.overlay.removeEventListener('pointerup', up);
+    const tiny = a.pts ? (a.pts.length < 2 || Math.hypot(a.pts.at(-1)[0] - a.pts[0][0], a.pts.at(-1)[1] - a.pts[0][1]) < 3 && a.kind !== 'pen')
+      : (a.w < 3 || a.h < 3);
+    if (tiny) { deleteAnn(a.id, false); return; }
+    pushHistory(snap);
+    select(a.id);
+  };
+  p.overlay.addEventListener('pointermove', move); p.overlay.addEventListener('pointerup', up);
+}
+
+/* ---- highlight theo dòng chữ */
+function charEdges(it) {
+  if (it._edges) return it._edges;
+  measureCtx.font = `${it.bold ? 'bold ' : ''}100px ${FONT_CSS[it.font] || FONT_CSS.sans}`;
+  const full = measureCtx.measureText(it.str).width || 1;
+  const k = it.w / full;
+  const edges = [it.x];
+  for (let i = 1; i <= it.str.length; i++) edges.push(it.x + measureCtx.measureText(it.str.slice(0, i)).width * k);
+  return (it._edges = edges);
+}
+function textLines(p) {
+  if (p._lines && p._linesFrom === p.items) return p._lines;
+  const items = [...(p.items || [])].sort((a, b) => a.baseline - b.baseline || a.x - b.x);
+  const rows = [];
+  for (const it of items) {
+    let row = rows.find((r) => Math.abs(r.baseline - it.baseline) < Math.min(r.size, it.size) * 0.4);
+    if (!row) { row = { baseline: it.baseline, size: it.size, items: [] }; rows.push(row); }
+    row.items.push(it);
+  }
+  const segs = [];
+  for (const r of rows) {
+    r.items.sort((a, b) => a.x - b.x);
+    let cur = null;
+    for (const it of r.items) {
+      if (cur && it.x - cur.x1 > Math.max(cur.size, it.size) * 2.5) { segs.push(cur); cur = null; }   // khoảng trống lớn = cột khác
+      if (!cur) cur = { baseline: r.baseline, size: it.size, items: [], x0: it.x, x1: it.x + it.w };
+      cur.items.push(it); cur.x1 = Math.max(cur.x1, it.x + it.w); cur.size = Math.max(cur.size, it.size);
+    }
+    if (cur) segs.push(cur);
+  }
+  segs.forEach((g) => { g.top = g.baseline - g.size * 0.88; g.bottom = g.baseline + g.size * 0.26; });
+  segs.sort((a, b) => a.top - b.top || a.x0 - b.x0);
+  segs.forEach((g, i) => (g.idx = i));
+  p._linesFrom = p.items;
+  return (p._lines = segs);
+}
+function snapX(seg, x) {
+  if (x <= seg.x0) return seg.x0;
+  if (x >= seg.x1) return seg.x1;
+  let best = seg.x0, bd = Infinity;
+  for (const it of seg.items) for (const e of charEdges(it)) { const dd = Math.abs(e - x); if (dd < bd) { bd = dd; best = e; } }
+  return best;
+}
+function locateText(p, pt, strict) {
+  let best = null, bd = Infinity;
+  for (const g of textLines(p)) {
+    const dy = pt.y < g.top ? g.top - pt.y : pt.y > g.bottom ? pt.y - g.bottom : 0;
+    const dx = pt.x < g.x0 ? g.x0 - pt.x : pt.x > g.x1 ? pt.x - g.x1 : 0;
+    const dist = dy * 4 + dx;
+    if (dist < bd) { bd = dist; best = g; }
+  }
+  if (!best) return null;
+  if (strict && bd > best.size * 1.5) return null;
+  return { seg: best, x: snapX(best, pt.x) };
+}
+function textRangeRects(p, a, b) {
+  const [s, e] = (a.seg.idx < b.seg.idx || (a.seg === b.seg && a.x <= b.x)) ? [a, b] : [b, a];
+  const segs = textLines(p);
+  const colL = Math.min(s.seg.x0, e.seg.x0), colR = Math.max(s.seg.x1, e.seg.x1);
+  const out = [];
+  for (let i = s.seg.idx; i <= e.seg.idx; i++) {
+    const g = segs[i];
+    if (g !== s.seg && g !== e.seg && (g.x1 < colL || g.x0 > colR)) continue;
+    const x0 = g === s.seg ? s.x : g.x0, x1 = g === e.seg ? e.x : g.x1;
+    if (x1 - x0 > 0.5) out.push({ x: x0, y: g.top, w: x1 - x0, h: g.bottom - g.top });
+  }
+  return out;
+}
+function makeHighlight(page, rects) {
+  const d = state.defaults.highlight;
+  return { type: 'highlight', page, ...bboxOfRects(rects), rects, color: d.color, opacity: d.opacity, style: d.style };
+}
+function dragTextHighlight(e, p, startLoc) {
+  const s = state.scale;
+  const layer = document.createElement('div');
+  p.overlay.appendChild(layer);
+  let rects = [];
+  let moved = false;
+  const sx = e.clientX, sy = e.clientY;
+  const d = state.defaults.highlight;
+  const paint = () => {
+    layer.innerHTML = '';
+    for (const r of rects) {
+      const el = document.createElement('div');
+      el.className = 'draft-hl';
+      const style = d.style;
+      let top = r.y, h = r.h;
+      if (style === 'underline') { h = Math.max(0.8, r.h * 0.07); top = r.y + r.h - h * 1.6; }
+      else if (style === 'strike') { h = Math.max(0.8, r.h * 0.07); top = r.y + r.h * 0.52 - h / 2; }
+      Object.assign(el.style, { left: r.x * s + 'px', top: top * s + 'px', width: r.w * s + 'px', height: Math.max(h * s, 1) + 'px',
+        background: d.color, opacity: style === 'highlight' ? d.opacity : 1 });
+      layer.appendChild(el);
+    }
+  };
+  p.overlay.setPointerCapture(e.pointerId);
+  const move = (ev) => {
+    if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+    moved = true;
+    const loc = locateText(p, pagePoint(ev, p), false);
+    if (loc) { rects = textRangeRects(p, startLoc, loc); paint(); }
+  };
+  const up = () => {
+    p.overlay.removeEventListener('pointermove', move); p.overlay.removeEventListener('pointerup', up);
+    layer.remove();
+    if (!moved) {   // bấm 1 lần: tô cả dòng
+      const g = startLoc.seg;
+      rects = [{ x: g.x0, y: g.top, w: g.x1 - g.x0, h: g.bottom - g.top }];
+    }
+    if (!rects.length) return;
+    addAnn(makeHighlight(p.index, rects), { selectIt: false });
+  };
+  p.overlay.addEventListener('pointermove', move); p.overlay.addEventListener('pointerup', up);
 }
 
 function dragRect(e, p, start) {
@@ -589,7 +889,7 @@ function dragRect(e, p, start) {
     const w = Math.abs(cur.x - start.x), h = Math.abs(cur.y - start.y);
     if (w < 3 || h < 3) return;
     const base = { page: p.index, x: Math.min(start.x, cur.x), y: Math.min(start.y, cur.y), w, h };
-    if (tool === 'highlight') addAnn({ type: 'highlight', ...base, ...state.defaults.highlight }, { selectIt: false });
+    if (tool === 'highlight') addAnn(makeHighlight(p.index, [{ x: base.x, y: base.y, w, h }]), { selectIt: false });
     else addAnn({ type: 'whiteout', ...base, ...state.defaults.whiteout }, { selectIt: false });
   };
   p.overlay.addEventListener('pointermove', move); p.overlay.addEventListener('pointerup', up);
@@ -599,9 +899,10 @@ function createEditFromItem(p, key) {
   const exist = state.anns.find((a) => a.srcKey === key);
   if (exist) { startEditing(exist); return; }
   const it = (p.items || []).find((i) => i.key === key); if (!it) return;
+  const box = itemBox(it);
   const a = addAnn({
     type: 'edit', page: p.index, srcKey: key, text: it.str,
-    ox: it.x - 1, oy: it.baseline - it.size * 0.9, ow: it.w + 2, oh: it.size * 1.15,
+    ox: box.x, oy: box.y, ow: box.w, oh: box.h,
     x: it.x, y: it.baseline - it.size * EDIT_TOP,
     size: Math.round(it.size * 10) / 10, color: state.defaults.text.color === '#000000' ? '#000000' : state.defaults.text.color,
     font: it.font, bold: it.bold, whiteBg: state.defaults.edit.whiteBg,
@@ -658,13 +959,13 @@ function highlightSelection() {
         last.x = Math.min(last.x, r.x); last.y = Math.min(last.y, r.y); last.w = x2 - last.x; last.h = y2 - last.y;
       } else merged.push({ ...r });
     }
-    for (const r of merged) created.push({ type: 'highlight', page: p.index, ...r, ...state.defaults.highlight, id: newId() });
+    if (merged.length) created.push({ ...makeHighlight(p.index, merged), id: newId() });
   }
   if (!created.length) return false;
   pushHistory(snap);
   created.forEach((a) => addAnn(a, { history: false, selectIt: false }));
   sel.removeAllRanges();
-  toast('Đã highlight ' + created.length + ' vùng');
+  toast('Đã highlight phần chữ đã bôi đen');
   return true;
 }
 
@@ -680,47 +981,100 @@ function setTool(t, silent = false) {
   if (t === 'image' && !state.pendingImage && !silent) $('#fileImage').click();
   if (t !== 'image') state.pendingImage = null;
   $('#hint').textContent = HINTS[t];
+  if ((t === 'edit' || t === 'highlight') && state.pdf) {
+    const p = state.pages[currentPageIndex()];
+    if (p && p.scanned) notifyScanned(p, t === 'highlight' ? 'highlight' : 'action');
+  }
   syncProps();
 }
 
+function defaultsFor(kind) { return state.defaults[kind === 'edit' ? 'text' : kind] || null; }
 function propTarget() {
   const a = state.sel && findAnn(state.sel);
-  if (a) return { kind: a.type === 'edit' ? 'text' : a.type, obj: a, ann: a };
-  const kind = { text: 'text', edit: 'text', select: 'text', image: 'text', highlight: 'highlight', whiteout: 'whiteout', comment: 'comment' }[state.tool];
-  return { kind, obj: state.defaults[kind], ann: null };
+  if (a) return { kind: a.type, ann: a, obj: a };
+  const kind = { text: 'text', edit: 'edit', highlight: 'highlight', whiteout: 'whiteout', comment: 'comment', shape: 'shape' }[state.tool] || null;
+  return { kind, ann: null, obj: kind ? defaultsFor(kind) : null };
+}
+function renderSwatches(sel, colors, current, onPick) {
+  const box = $(sel);
+  box.innerHTML = '';
+  for (const c of colors) {
+    const b = document.createElement('button');
+    b.className = 'swatch' + (c === null ? ' none' : '');
+    if (c) b.style.background = c;
+    b.title = c === null ? 'Không tô nền' : c;
+    if (c === null ? !current : (current && c.toLowerCase() === current.toLowerCase())) b.classList.add('active');
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', () => onPick(c));
+    box.appendChild(b);
+  }
 }
 function syncProps() {
-  const { kind, obj, ann } = propTarget();
-  const show = (sel, on) => ($(sel).style.display = on ? '' : 'none');
-  const isText = kind === 'text';
-  show('#propSize', isText); show('#propFont', isText); show('#propBold', isText);
-  $('#propSize').parentElement.style.display = isText ? '' : 'none';
-  show('#opacityWrap', kind === 'highlight');
-  show('#whiteBgWrap', (ann && ann.type === 'edit') || (!ann && state.tool === 'edit'));
-  $('#propColor').parentElement.style.display = kind === 'image' ? 'none' : '';
+  const { kind, ann, obj } = propTarget();
+  const shapeKind = ann && ann.type === 'shape' ? ann.kind : state.defaults.shape.kind;
+  const boxy = shapeKind === 'rect' || shapeKind === 'ellipse';
+  const hasFill = kind === 'shape' && boxy;
+  document.querySelectorAll('#propbar .pgroup').forEach((g) => {
+    const fors = g.dataset.for.split(' ');
+    let on = !!kind && (fors.includes(kind) || (hasFill && fors.includes('shape-fill')));
+    // nhóm "tool-only": hiện khi đang dùng công cụ đó; khi chỉ chọn đối tượng thì chỉ cho đổi chữ nhật <-> elip
+    if (g.classList.contains('tool-only') && ann && state.tool !== kind) on = on && kind === 'shape' && boxy;
+    g.hidden = !on;
+  });
+  $('#ctxLabel').textContent = kind ? (ann ? 'Đang chọn: ' : 'Công cụ: ') + KIND_LABEL[kind] +
+    (kind === 'shape' ? ' – ' + SHAPE_LABEL[shapeKind] : '') : '';
+  const empty = $('#propEmpty');
+  empty.hidden = !!kind && kind !== 'image';
+  empty.textContent = kind === 'image' ? 'Kéo để di chuyển, kéo góc dưới để đổi cỡ (giữ Shift để co giãn tự do).'
+    : state.tool === 'image' ? 'Chọn file ảnh rồi bấm vào trang để đặt.'
+    : 'Chọn một công cụ hoặc một đối tượng để chỉnh thuộc tính.';
   if (obj) {
+    $('#colorLabel').textContent = kind === 'shape' ? 'Màu nét' : 'Màu';
     if (obj.color) $('#propColor').value = obj.color;
     if (obj.size) $('#propSize').value = obj.size;
     if (obj.font) $('#propFont').value = obj.font;
     $('#propBold').classList.toggle('on', !!obj.bold);
-    if (obj.opacity) $('#propOpacity').value = obj.opacity;
+    $('#propOpacity').value = obj.opacity ?? 1;
+    if (kind === 'shape') { $('#propWidth').value = obj.width ?? 2; if (obj.fill) $('#propFill').value = obj.fill; }
+    if (kind === 'highlight') { $('#hlStyle').value = obj.style || 'highlight'; $('#hlMode').value = state.defaults.highlight.mode; }
   }
   $('#propWhiteBg').checked = ann && ann.type === 'edit' ? !!ann.whiteBg : state.defaults.edit.whiteBg;
+  document.querySelectorAll('#shapeKinds button').forEach((b) => b.classList.toggle('active', b.dataset.kind === shapeKind));
+  if (kind && PALETTES[kind]) renderSwatches('#swColor', PALETTES[kind], obj?.color, (c) => changeProp('color', c));
+  if (hasFill) renderSwatches('#swFill', PALETTES.fill, obj?.fill ?? null, (c) => changeProp('fill', c));
 }
 function changeProp(key, value) {
-  const { obj, ann } = propTarget();
+  const { kind, ann } = propTarget();
+  if (!kind) return;
   if (key === 'whiteBg') {
     if (ann && ann.type === 'edit') { pushHistory(); ann.whiteBg = value; } else state.defaults.edit.whiteBg = value;
     return;
   }
-  if (!obj) return;
-  if (ann) { pushHistory(); ann[key] = value; updateAnnEl(ann); }
-  else obj[key] = value;
-  // nhớ làm mặc định cho lần sau
-  if (ann && state.defaults[ann.type === 'edit' ? 'text' : ann.type] && key !== 'text') {
-    const d = state.defaults[ann.type === 'edit' ? 'text' : ann.type];
-    if (key in d) d[key] = value;
+  if (ann) {
+    pushHistory();
+    ann[key] = value;
+    if (ann.type === 'shape' && ann.pts) shapeBBox(ann);
+    updateAnnEl(ann);
   }
+  const d = defaultsFor(kind);       // nhớ làm mặc định cho lần sau
+  if (d && key in d) d[key] = value;
+  syncProps();
+}
+let liveSnap = null;               // đổi liên tục (kéo thanh màu/độ đậm) -> chỉ lưu 1 bước hoàn tác
+function liveProp(key, value) {
+  const { kind, ann } = propTarget();
+  if (!kind) return;
+  if (ann) {
+    if (!liveSnap) liveSnap = clone(state.anns);
+    ann[key] = value;
+    if (ann.type === 'shape' && ann.pts) shapeBBox(ann);
+    updateAnnEl(ann);
+  }
+  const d = defaultsFor(kind);
+  if (d && key in d) d[key] = value;
+}
+function commitLive() {
+  if (liveSnap) { pushHistory(liveSnap); liveSnap = null; }
   syncProps();
 }
 
@@ -739,6 +1093,8 @@ async function exportPdf() {
 async function toDocx(applyEdits) {
   if (!state.docId) return;
   finishEditing();
+  if (scannedPages().length &&
+      !confirm('PDF này có trang là ảnh scan (không có chữ thật). File Word tạo ra sẽ chỉ chứa hình ảnh của trang, không sửa chữ được. Vẫn tiếp tục?')) return;
   busy(true, 'Đang chuyển sang Word… (file lớn có thể mất vài phút)');
   try {
     const r = await api('/api/docx', { id: state.docId, anns: state.anns, name: state.name, applyEdits });
@@ -818,7 +1174,8 @@ document.addEventListener('paste', async (e) => {
   }
 });
 function duplicate(src, pageIndex = src.page) {
-  const a = { ...src, id: newId(), page: pageIndex, x: src.x + 12, y: src.y + 12 };
+  const a = { ...src, id: newId(), page: pageIndex };
+  shiftAnn(a, 12, 12);
   if (a.type === 'edit') {   // bản sao của "sửa chữ" thành văn bản thường
     a.type = 'text'; delete a.ox; delete a.oy; delete a.ow; delete a.oh; delete a.srcKey; delete a.whiteBg;
   }
@@ -846,11 +1203,12 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     const st = e.shiftKey ? 10 : 1;
     if (!e.repeat) pushHistory();
-    if (e.key === 'ArrowLeft') a.x -= st; if (e.key === 'ArrowRight') a.x += st;
-    if (e.key === 'ArrowUp') a.y -= st; if (e.key === 'ArrowDown') a.y += st;
+    const dx = e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0;
+    const dy = e.key === 'ArrowUp' ? -st : e.key === 'ArrowDown' ? st : 0;
+    shiftAnn(a, dx, dy);
     updateAnnEl(a); return;
   }
-  const map = { v: 'select', t: 'text', i: 'image', h: 'highlight', w: 'whiteout', c: 'comment', e: 'edit' };
+  const map = { v: 'select', t: 'text', i: 'image', h: 'highlight', s: 'shape', w: 'whiteout', c: 'comment', e: 'edit' };
   if (map[k] && state.pdf) setTool(map[k]);
 });
 
@@ -874,21 +1232,29 @@ document.querySelectorAll('#tools button').forEach((b) => {
   b.addEventListener('mousedown', (e) => e.preventDefault());   // giữ vùng bôi đen
   b.addEventListener('click', () => setTool(b.dataset.tool));
 });
-$('#propColor').addEventListener('input', (e) => {
-  const { ann } = propTarget();
-  if (ann) { ann.color = e.target.value; updateAnnEl(ann); } else changeProp('color', e.target.value);
-});
-$('#propColor').addEventListener('change', (e) => {   // lưu lịch sử 1 lần khi chọn xong màu
-  const { ann } = propTarget();
-  if (ann) { const snap = clone(state.anns); const prev = $('#propColor').dataset.prev; if (prev) snap.find((x) => x.id === ann.id).color = prev; pushHistory(snap); const k = ann.type === 'edit' ? 'text' : ann.type; if (state.defaults[k]) state.defaults[k].color = e.target.value; }
-});
-$('#propColor').addEventListener('focus', (e) => (e.target.dataset.prev = e.target.value));
-$('#propColor').addEventListener('click', (e) => (e.target.dataset.prev = e.target.value));
+$('#propColor').addEventListener('input', (e) => liveProp('color', e.target.value));
+$('#propColor').addEventListener('change', commitLive);
+$('#propFill').addEventListener('input', (e) => liveProp('fill', e.target.value));
+$('#propFill').addEventListener('change', commitLive);
+$('#propOpacity').addEventListener('input', (e) => liveProp('opacity', parseFloat(e.target.value)));
+$('#propOpacity').addEventListener('change', commitLive);
+$('#propWidth').addEventListener('input', (e) => { const v = parseFloat(e.target.value); if (v >= 0) liveProp('width', clamp(v, 0, 40)); });
+$('#propWidth').addEventListener('change', commitLive);
 $('#propSize').addEventListener('change', (e) => changeProp('size', clamp(parseFloat(e.target.value) || 14, 4, 300)));
 $('#propFont').addEventListener('change', (e) => changeProp('font', e.target.value));
 $('#propBold').addEventListener('click', () => changeProp('bold', !$('#propBold').classList.contains('on')));
-$('#propOpacity').addEventListener('change', (e) => changeProp('opacity', parseFloat(e.target.value)));
 $('#propWhiteBg').addEventListener('change', (e) => changeProp('whiteBg', e.target.checked));
+$('#hlStyle').addEventListener('change', (e) => changeProp('style', e.target.value));
+$('#hlMode').addEventListener('change', (e) => { state.defaults.highlight.mode = e.target.value; });
+document.querySelectorAll('#shapeKinds button').forEach((b) => b.addEventListener('click', () => {
+  const k = b.dataset.kind;
+  const a = state.sel && findAnn(state.sel);
+  if (state.tool !== 'shape' && a && a.type === 'shape' && (a.kind === 'rect' || a.kind === 'ellipse') && (k === 'rect' || k === 'ellipse')) {
+    changeProp('kind', k); return;
+  }
+  state.defaults.shape.kind = k;
+  if (state.tool !== 'shape') setTool('shape'); else { select(null); syncProps(); }
+}));
 
 $('#btnUndo').onclick = undo;
 $('#btnRedo').onclick = redo;
@@ -906,6 +1272,7 @@ document.querySelectorAll('[data-docx]').forEach((b) => (b.onclick = () => {
   toDocx(b.dataset.docx === 'edited');
 }));
 $('#btnDocx2Pdf').onclick = () => $('#fileDocx').click();
+$('#scanBannerClose').onclick = () => { $('#scanBanner').hidden = true; };
 
 // bỏ chọn khi bấm ra ngoài
 $('#viewer').addEventListener('pointerdown', (e) => {

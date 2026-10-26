@@ -4,6 +4,7 @@ Chạy:  python app.py   rồi mở http://127.0.0.1:5000
 """
 import base64
 import io
+import math
 import mimetypes
 import os
 import shutil
@@ -140,6 +141,62 @@ def to_page_rect(page, x, y, w, h):
     return r
 
 
+def _arrow_head(p1, p2, sw):
+    """Giống arrowHead() ở frontend: trả về (điểm gốc của đầu mũi tên, 3 đỉnh tam giác)."""
+    L = max(8.0, sw * 4)
+    hw = L * 0.45
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    length = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / length, dy / length
+    l = min(L, length * 0.9)
+    k = l / L
+    bx, by = p2[0] - ux * l, p2[1] - uy * l
+    return (bx, by), [p2, (bx - uy * hw * k, by + ux * hw * k), (bx + uy * hw * k, by - ux * hw * k)]
+
+
+def draw_shape(page, a):
+    m = page.derotation_matrix
+    sh = page.new_shape() if hasattr(page, "new_shape") else page.newShape()
+    sw = max(float(a.get("width", 2) or 0), 0)
+    color = hex_to_rgb(a.get("color"), (1, 0, 0))
+    fill = hex_to_rgb(a.get("fill")) if a.get("fill") else None
+    op = float(a.get("opacity", 1))
+    kind = a.get("kind", "rect")
+    pt = lambda p: fitz.Point(float(p[0]), float(p[1])) * m
+
+    if kind in ("rect", "ellipse"):
+        x, y, w, h = (float(a.get(k, 0)) for k in ("x", "y", "w", "h"))
+        r = to_page_rect(page, x + sw / 2, y + sw / 2, max(w - sw, 0.1), max(h - sw, 0.1))
+        if kind == "rect":
+            sh.draw_rect(r)
+        else:
+            sh.draw_oval(r)
+        if sw <= 0 and fill is None:
+            return
+        sh.finish(color=color if sw > 0 else None, fill=fill, width=sw,
+                  stroke_opacity=op, fill_opacity=op, lineJoin=1)
+    else:
+        pts = [(float(p[0]), float(p[1])) for p in a.get("pts") or []]
+        if len(pts) < 2:
+            return
+        if kind == "pen":
+            sh.draw_polyline([pt(p) for p in pts])
+            sh.finish(color=color, width=sw, lineCap=1, lineJoin=1, closePath=False, stroke_opacity=op)
+        else:
+            p1, p2 = pts[0], pts[-1]
+            if kind == "arrow":
+                base, tri = _arrow_head(p1, p2, sw)
+                if sw > 0:
+                    sh.draw_line(pt(p1), pt(base))
+                    sh.finish(color=color, width=sw, lineCap=1, stroke_opacity=op)
+                sh.draw_polyline([pt(p) for p in tri] + [pt(tri[0])])
+                sh.finish(color=None, fill=color, closePath=True, fill_opacity=op, stroke_opacity=op)
+            else:
+                sh.draw_line(pt(p1), pt(p2))
+                sh.finish(color=color, width=sw, lineCap=1, stroke_opacity=op)
+    sh.commit(overlay=True)
+
+
 def apply_annotations(doc, anns):
     by_page = {}
     for a in anns or []:
@@ -178,6 +235,8 @@ def apply_annotations(doc, anns):
                 data = base64.b64decode(src.split(",", 1)[1] if "," in src else src)
                 page.insert_image(to_page_rect(page, x, y, w, h), stream=data,
                                   keep_proportion=False, overlay=True, rotate=page.rotation)
+            elif t == "shape":
+                draw_shape(page, a)
             elif t in ("text", "edit"):
                 if t == "text" and a.get("bg"):
                     page.draw_rect(to_page_rect(page, x, y, w, h), color=None,
@@ -192,9 +251,21 @@ def apply_annotations(doc, anns):
             x, y = float(a.get("x", 0)), float(a.get("y", 0))
             w, h = float(a.get("w", 0)), float(a.get("h", 0))
             if t == "highlight":
-                annot = page.add_highlight_annot(to_page_rect(page, x, y, w, h))
+                rects = a.get("rects") or [{"x": x, "y": y, "w": w, "h": h}]
+                quads = [to_page_rect(page, float(r["x"]), float(r["y"]), float(r["w"]), float(r["h"]))
+                         for r in rects]
+                style = a.get("style", "highlight")
+                if style == "underline":
+                    annot = page.add_underline_annot(quads)
+                elif style == "strike":
+                    annot = page.add_strikeout_annot(quads)
+                else:
+                    annot = page.add_highlight_annot(quads)
+                if annot is None:
+                    continue
                 annot.set_colors(stroke=hex_to_rgb(a.get("color"), (1, 1, 0)))
-                annot.set_opacity(float(a.get("opacity", 0.4)))
+                if style == "highlight":
+                    annot.set_opacity(float(a.get("opacity", 0.4)))
                 annot.update()
             elif t == "comment":
                 pt = fitz.Point(x, y) * page.derotation_matrix

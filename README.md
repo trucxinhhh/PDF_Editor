@@ -6,7 +6,9 @@ Mở một file PDF và bạn có thể:
 
 - **Chèn ảnh** đè lên nội dung trang: kéo, đổi kích thước, dán từ clipboard
 - **Chèn văn bản** tiếng Việt có dấu, chỉnh màu, cỡ chữ, font, in đậm
-- **Highlight**: kéo chuột tô vùng, hoặc bôi đen chữ rồi bấm Highlight
+- **Highlight theo dòng chữ**: kéo trên chữ là tô đúng theo từng dòng, bắt theo từng ký tự; bấm 1 lần để tô cả dòng. Có 3 kiểu: tô nền, gạch chân, gạch ngang
+- **Vẽ hình**: chữ nhật, elip/tròn, đường thẳng, mũi tên, bút vẽ tự do; chỉnh được màu nét, màu nền, độ dày nét, độ đậm
+- **Bảng màu gợi ý** cho từng loại (chữ, highlight, hình, che vùng…), vẫn chọn được màu tuỳ ý
 - **Che vùng**: che trắng hoặc che màu nội dung không muốn hiện
 - **Chú thích** (sticky note), mở được trong Acrobat, Foxit, Edge
 - **Sửa chữ gốc** của PDF: chữ cũ bị xoá thật và chữ mới được ghi vào đúng vị trí
@@ -90,6 +92,29 @@ Muốn dùng font khác, đặt file vào thư mục `fonts/` với tên `sans.t
 - Trạng thái: http://localhost:5000/api/health (hiển thị phiên bản PyMuPDF, font đang dùng, LibreOffice có hay không)
 - `docker ps`: cột STATUS hiện `healthy` là container đang chạy tốt
 
+### Xử lý lỗi khi build
+
+**`failed to fetch oauth token` / `failed to solve: ... docker.io` / `connection was forcibly closed`**
+
+Máy không kết nối được Docker Hub để tải image gốc `python`. Đây là lỗi mạng (hay gặp với một số nhà mạng hoặc khi dùng IPv6), không phải lỗi code. Có thể thử lần lượt:
+
+1. **Dùng bản mirror của Google** (không cần Docker Hub). Trong PowerShell:
+   ```powershell
+   $env:BASE_IMAGE="mirror.gcr.io/library/python:3.12-slim-bookworm"
+   docker compose up -d --build
+   ```
+   Muốn lần sau không phải gõ lại: tạo file `.env` cạnh `docker-compose.yml` với nội dung
+   ```
+   BASE_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm
+   ```
+   Nếu chạy bằng lệnh docker thuần:
+   `docker build --build-arg BASE_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm -t pdf-editor .`
+2. **Thêm mirror cho Docker Desktop**: vào Settings → Docker Engine, thêm `"registry-mirrors": ["https://mirror.gcr.io"]` vào JSON, bấm *Apply & restart*.
+3. **Đổi DNS / tắt IPv6**: đặt DNS của máy thành `8.8.8.8` và `1.1.1.1`, hoặc tắt IPv6 trên card mạng rồi thử lại. Cũng có thể đổi mạng khác (4G, VPN).
+4. Thử tải riêng image gốc để kiểm tra: `docker pull python:3.12-slim-bookworm`.
+
+**Lỗi khi `pip install` hoặc `apt-get`**: cũng là lỗi mạng. Thử lại, hoặc đổi DNS/mạng như bước 3.
+
 ---
 
 ## 2. Chạy trực tiếp, không cần Docker
@@ -103,17 +128,32 @@ Khi chạy trực tiếp trên Windows, chức năng Word → PDF dùng Microsof
 
 ---
 
-## 3. Hướng dẫn sử dụng
+## 3. PDF dạng ảnh scan
+
+PDF tạo từ máy scan (hoặc ảnh chụp) chỉ chứa **hình ảnh** của trang, không có chữ thật bên trong. Khi mở loại file này, app hiện một **thông báo màu vàng** ở đầu trang.
+
+| Với PDF ảnh scan | |
+|---|---|
+| Thêm văn bản, ảnh, hình vẽ, che vùng, chú thích, highlight vùng tự do, xuất PDF | ✔ Dùng bình thường |
+| Sửa chữ gốc, highlight theo dòng chữ, bôi đen để copy chữ | ✘ Không dùng được (không có chữ thật) |
+| Chuyển sang Word | File Word chỉ chứa hình ảnh của trang |
+
+Cách sửa nội dung trên bản scan: dùng **Che vùng** để che chữ cũ, rồi dùng **Văn bản** để gõ chữ mới đè lên.
+
+---
+
+## 4. Hướng dẫn sử dụng
 
 | Công cụ | Cách dùng |
 |---|---|
 | **Chọn** (V) | Bấm để chọn hoặc kéo đối tượng. Nhấp đúp để sửa chữ. Kéo ô vuông ở góc dưới để đổi cỡ. Bôi đen chữ của PDF rồi Ctrl+C để copy. |
 | **Văn bản** (T) | Bấm vào trang rồi gõ. Enter để xuống dòng, Esc để kết thúc. |
 | **Ảnh** (I) | Chọn ảnh rồi bấm vào trang. Hoặc Ctrl+V để dán ảnh, hoặc kéo thả file ảnh lên trang. Kéo góc để đổi cỡ (giữ Shift để co giãn tự do). |
-| **Highlight** (H) | Kéo chuột để tô, hoặc bôi đen chữ rồi bấm nút Highlight. |
+| **Highlight** (H) | Kéo trên chữ để tô theo dòng (tự bắt theo từng ký tự). Bấm 1 lần vào một dòng để tô cả dòng. Kéo ở vùng trống để tô một vùng tự do. Muốn luôn tô vùng tự do thì chọn “Tô vùng tự do” ở thanh thuộc tính. Đổi kiểu Tô nền / Gạch chân / Gạch ngang ở đó. Cũng có thể bôi đen chữ ở chế độ Chọn rồi bấm nút Highlight. |
+| **Hình** (S) | Chọn loại hình ở thanh thuộc tính: ▭ chữ nhật, ◯ elip, ╱ đường thẳng, ↗ mũi tên, ✎ bút vẽ. Kéo chuột trên trang để vẽ. Giữ Shift để vẽ hình vuông/tròn hoặc đường thẳng góc 45°. Chỉnh được màu nét, màu nền (ô gạch đỏ = không tô nền), độ dày nét, độ đậm. |
 | **Che vùng** (W) | Kéo chuột để che nội dung. |
 | **Chú thích** (C) | Bấm vào trang để thêm ghi chú. |
-| **Sửa chữ gốc** (E) | Bấm vào dòng chữ có khung xanh để sửa. Tick “Nền trắng” nếu muốn tô trắng vùng chữ cũ. |
+| **Sửa chữ gốc** (E) | Bấm vào dòng chữ có khung xanh để sửa. Tick “Nền trắng” nếu muốn tô trắng vùng chữ cũ. Không dùng được với PDF ảnh scan (xem mục 3). |
 
 **Phím tắt**
 
@@ -127,6 +167,8 @@ Khi chạy trực tiếp trên Windows, chức năng Word → PDF dùng Microsof
 | Ctrl+S | Xuất PDF |
 | Ctrl+lăn chuột | Zoom |
 
+**Thanh thuộc tính** (hàng thứ hai) thay đổi theo công cụ hoặc đối tượng đang chọn: màu (có các ô màu gợi ý, bấm ô vuông màu để chọn màu bất kỳ), cỡ chữ, font, độ dày nét… Nếu đang chọn một đối tượng thì thay đổi áp dụng ngay cho đối tượng đó và được ghi nhớ làm mặc định cho lần vẽ sau.
+
 **Các nút bên phải thanh công cụ**
 
 - **Xuất PDF**: tải về `<tên>_edited.pdf`
@@ -137,13 +179,13 @@ Khi chạy trực tiếp trên Windows, chức năng Word → PDF dùng Microsof
   - **Word → PDF**: chuyển một file `.docx` sang PDF
 
 ### Giới hạn
-- PDF dạng **ảnh scan** không có chữ thật bên trong, nên “Sửa chữ gốc” và chuyển Word sẽ kém (cần OCR trước).
+- PDF dạng **ảnh scan** không sửa chữ gốc được (xem mục 3).
 - Chuyển PDF → Word giữ bố cục ở mức tốt, nhưng với bảng biểu phức tạp có thể cần chỉnh lại.
 - File tải lên tối đa 300 MB.
 
 ---
 
-## 4. Cấu trúc thư mục
+## 5. Cấu trúc thư mục
 
 ```
 PDF_Editor/

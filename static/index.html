@@ -21,23 +21,13 @@
     <button data-tool="select" class="active" title="Chọn / di chuyển, bôi đen chữ để copy (V)">Chọn</button>
     <button data-tool="text" title="Chèn văn bản: bấm vào trang (T)">Văn bản</button>
     <button data-tool="image" title="Chèn ảnh đè lên trang (I)">Ảnh</button>
-    <button data-tool="highlight" title="Highlight: kéo chuột, hoặc bôi đen chữ rồi bấm nút này (H)">Highlight</button>
+    <button data-tool="highlight" title="Highlight: kéo trên dòng chữ để tô theo dòng, bấm 1 lần để tô cả dòng (H)">Highlight</button>
+    <button data-tool="shape" title="Vẽ hình: chữ nhật, elip, đường thẳng, mũi tên, bút vẽ tự do (S)">Hình</button>
     <button data-tool="whiteout" title="Che trắng / che màu một vùng (W)">Che vùng</button>
     <button data-tool="comment" title="Chú thích (sticky note): bấm vào trang (C)">Chú thích</button>
     <button data-tool="edit" title="Sửa chữ gốc: bấm vào dòng chữ có sẵn trong PDF (E)">Sửa chữ gốc</button>
   </div>
 
-  <div class="group props" id="props">
-    <label title="Màu">Màu <input type="color" id="propColor" value="#000000"></label>
-    <label title="Cỡ chữ">Cỡ <input type="number" id="propSize" value="14" min="4" max="200" step="1"></label>
-    <select id="propFont" title="Font">
-      <option value="sans">Arial</option>
-      <option value="serif">Times New Roman</option>
-    </select>
-    <button id="propBold" class="toggle" title="In đậm"><b>B</b></button>
-    <label title="Độ trong suốt (highlight)" id="opacityWrap">Mờ <input type="range" id="propOpacity" min="0.1" max="1" step="0.05" value="0.4"></label>
-    <label title="Khi sửa chữ gốc: tô nền trắng thay vì giữ nền" id="whiteBgWrap"><input type="checkbox" id="propWhiteBg"> Nền trắng</label>
-  </div>
 
   <div class="group">
     <button id="btnUndo" title="Hoàn tác (Ctrl+Z)">↶</button>
@@ -65,6 +55,83 @@
     <button id="btnExport" class="primary" title="Xuất PDF mới (Ctrl+S)">Xuất PDF</button>
   </div>
 </header>
+
+<div id="propbar">
+  <span id="ctxLabel"></span>
+
+  <div class="pgroup tool-only" data-for="shape">
+    <div class="seg" id="shapeKinds">
+      <button data-kind="rect" title="Hình chữ nhật">
+        <svg viewBox="0 0 20 20"><rect x="3" y="5" width="14" height="10" rx="1"/></svg></button>
+      <button data-kind="ellipse" title="Hình elip / tròn">
+        <svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="7" ry="5.5"/></svg></button>
+      <button data-kind="line" title="Đường thẳng (giữ Shift: thẳng góc 45°)">
+        <svg viewBox="0 0 20 20"><line x1="3" y1="16" x2="17" y2="4"/></svg></button>
+      <button data-kind="arrow" title="Mũi tên (giữ Shift: thẳng góc 45°)">
+        <svg viewBox="0 0 20 20"><line x1="3" y1="16" x2="15" y2="6"/><path d="M10 5 L16.5 4.2 L15.3 10.5" /></svg></button>
+      <button data-kind="pen" title="Bút vẽ tự do">
+        <svg viewBox="0 0 20 20"><path d="M3 14 C6 6, 8 16, 11 9 S16 7, 17 12"/></svg></button>
+    </div>
+  </div>
+
+  <div class="pgroup tool-only" data-for="highlight">
+    <select id="hlMode" title="Cách tô">
+      <option value="line">Tô theo dòng chữ</option>
+      <option value="rect">Tô vùng tự do</option>
+    </select>
+  </div>
+  <div class="pgroup" data-for="highlight">
+    <select id="hlStyle" title="Kiểu đánh dấu">
+      <option value="highlight">Tô nền</option>
+      <option value="underline">Gạch chân</option>
+      <option value="strike">Gạch ngang</option>
+    </select>
+  </div>
+
+  <div class="pgroup" data-for="text edit shape highlight whiteout comment">
+    <span class="plabel" id="colorLabel">Màu</span>
+    <input type="color" id="propColor" value="#000000" title="Chọn màu khác">
+    <div class="swatches" id="swColor"></div>
+  </div>
+
+  <div class="pgroup" data-for="shape-fill">
+    <span class="plabel">Nền</span>
+    <input type="color" id="propFill" value="#ffffff" title="Chọn màu nền khác">
+    <div class="swatches" id="swFill"></div>
+  </div>
+
+  <div class="pgroup" data-for="shape">
+    <span class="plabel">Nét</span>
+    <input type="number" id="propWidth" value="2" min="0" max="40" step="0.5" title="Độ dày nét (pt)">
+  </div>
+
+  <div class="pgroup" data-for="text edit">
+    <span class="plabel">Cỡ</span>
+    <input type="number" id="propSize" value="14" min="4" max="300" step="1" title="Cỡ chữ">
+    <select id="propFont" title="Font">
+      <option value="sans">Arial</option>
+      <option value="serif">Times New Roman</option>
+    </select>
+    <button id="propBold" class="toggle" title="In đậm"><b>B</b></button>
+  </div>
+
+  <div class="pgroup" data-for="highlight shape">
+    <span class="plabel">Độ đậm</span>
+    <input type="range" id="propOpacity" min="0.1" max="1" step="0.05" value="0.4" title="Độ đậm / trong suốt">
+  </div>
+
+  <div class="pgroup" data-for="edit">
+    <label title="Tô nền trắng vùng chữ cũ thay vì giữ nền gốc"><input type="checkbox" id="propWhiteBg"> Nền trắng</label>
+  </div>
+
+  <span id="propEmpty">Chọn một công cụ hoặc một đối tượng để chỉnh thuộc tính.</span>
+</div>
+
+<div id="scanBanner" hidden>
+  <span class="ico">!</span>
+  <span id="scanBannerText"></span>
+  <button id="scanBannerClose" title="Đóng">×</button>
+</div>
 
 <main id="viewer">
   <div id="dropzone">
