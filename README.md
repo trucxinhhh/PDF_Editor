@@ -13,6 +13,9 @@ Mở một file PDF và bạn có thể:
 - **Chú thích** (sticky note), mở được trong Acrobat, Foxit, Edge
 - **Sửa chữ gốc** của PDF: chữ cũ bị xoá thật và chữ mới được ghi vào đúng vị trí
 - **Copy** chữ trong PDF, copy hoặc nhân bản các đối tượng đã thêm
+- **Quản lý trang**: sắp xếp (kéo thả), xoay, xoá, nhân bản, thêm trang trắng
+- **Ghép PDF** (nhiều file thành một) và **tách PDF** (theo trang chọn, theo khoảng, hoặc cứ mỗi N trang)
+- **Tìm kiếm chữ** (Ctrl+F), gõ không dấu vẫn tìm được chữ có dấu
 - **Xuất PDF mới**, trong đó mọi phần đã thêm được giữ nguyên
 - **Lưu dự án** (`.pdfedit.json`) để mở lại và sửa tiếp các phần đã thêm
 - **PDF → Word (.docx)** giữ bố cục để sửa chữ trực tiếp trong Word, và **Word → PDF**
@@ -168,12 +171,57 @@ Cách sửa nội dung trên bản scan: dùng **Che vùng** để che chữ cũ
 |---|---|
 | **Chọn** (V) | Bấm để chọn hoặc kéo đối tượng. Nhấp đúp để sửa chữ. Kéo ô vuông ở góc dưới để đổi cỡ. Bôi đen chữ của PDF rồi Ctrl+C để copy. |
 | **Văn bản** (T) | Bấm vào trang rồi gõ. Enter để xuống dòng, Esc để kết thúc. |
-| **Ảnh** (I) | Chọn ảnh rồi bấm vào trang. Hoặc Ctrl+V để dán ảnh, hoặc kéo thả file ảnh lên trang. Kéo góc để đổi cỡ (giữ Shift để co giãn tự do). |
+| **Ảnh** (I) | Chọn ảnh rồi bấm vào trang. Hoặc Ctrl+V để dán ảnh, hoặc kéo thả lên trang: file ảnh từ máy (png, jpg, jfif, gif, webp, bmp, svg), hay ảnh kéo trực tiếp từ trang web khác. Kéo góc để đổi cỡ (giữ Shift để co giãn tự do). |
 | **Highlight** (H) | Kéo trên chữ để tô theo dòng (tự bắt theo từng ký tự). Bấm 1 lần vào một dòng để tô cả dòng. Kéo ở vùng trống để tô một vùng tự do. Muốn luôn tô vùng tự do thì chọn “Tô vùng tự do” ở thanh thuộc tính. Đổi kiểu Tô nền / Gạch chân / Gạch ngang ở đó. Cũng có thể bôi đen chữ ở chế độ Chọn rồi bấm nút Highlight. |
 | **Hình** (S) | Chọn loại hình ở thanh thuộc tính: ▭ chữ nhật, ◯ elip, ╱ đường thẳng, ↗ mũi tên, ✎ bút vẽ. Kéo chuột trên trang để vẽ. Giữ Shift để vẽ hình vuông/tròn hoặc đường thẳng góc 45°. Chỉnh được màu nét, màu nền (ô gạch đỏ = không tô nền), độ dày nét, độ đậm. |
 | **Che vùng** (W) | Kéo chuột để che nội dung. |
 | **Chú thích** (C) | Bấm vào trang để thêm ghi chú. |
 | **Sửa chữ gốc** (E) | Bấm vào dòng chữ có khung xanh để sửa. Tick “Nền trắng” nếu muốn tô trắng vùng chữ cũ. Không dùng được với PDF ảnh scan (xem mục 3). |
+
+### Tách PDF & Ghép / Chèn PDF
+
+Bấm nút **✂ Tách / Ghép ▾** trên thanh công cụ rồi chọn tính năng. Ở màn hình bắt đầu cũng có sẵn 2 nút **Tách PDF** và **Ghép PDF**. Mỗi tính năng mở một màn hình riêng: bên trái là lưới các trang, bên phải là bảng tuỳ chọn. Bấm **← Quay lại** hoặc **Esc** để về trình chỉnh sửa, hoặc đổi qua lại bằng nút **Tách | Ghép / Chèn** ở góc phải.
+
+**✂ Tách PDF** có 4 cách tách:
+
+| Cách | Thao tác |
+|---|---|
+| **Cắt thủ công** | Di chuột vào khe giữa hai trang rồi bấm biểu tượng **✂**. Đường cắt màu đỏ hiện ra, mỗi phần được tô một màu riêng (File 1, File 2…). Bấm lại để bỏ cắt. Có nút “Cắt từng trang” / “Bỏ hết đường cắt” |
+| **Trích xuất trang** | Bấm chọn các trang muốn lấy ra (có dấu ✓). Chọn gộp thành 1 file hoặc mỗi trang 1 file |
+| **Theo khoảng trang** | Nhập ví dụ `1-3, 4-6, 8`, mỗi khoảng thành 1 file. Trang không nằm trong khoảng nào sẽ hiện mờ |
+| **Cứ mỗi N trang** | Tự cắt đều mỗi N trang, vẫn bấm ✂ để chỉnh lại được |
+
+Bảng bên phải luôn cho biết sẽ tạo bao nhiêu file và mỗi file gồm những trang nào. Bấm **Tách PDF** để tải về: 1 file thì tải PDF, nhiều file thì tải 1 file ZIP. Sau đó có thể “Tải xuống lại”, “Tách tiếp” hoặc quay lại chỉnh sửa.
+
+**⧉ Ghép / Chèn PDF**
+- Lưới hiển thị tất cả các trang. Mỗi file có một màu riêng ở cạnh dưới trang.
+- **＋ Thêm file PDF** (chọn nhiều file được), hoặc kéo thả file PDF vào lưới đúng chỗ muốn chèn.
+- **Bấm chọn 1 trang** để đặt vị trí chèn: vạch xanh “Chèn vào đây” hiện ngay sau trang đó. Không chọn trang nào thì file mới được thêm vào cuối.
+- **Kéo thả** để sắp xếp. Di chuột vào trang để **xoay / nhân bản / xoá**. Thêm **trang trắng**, **đảo thứ tự**, hoặc **làm lại** từ đầu.
+- **Áp dụng vào tài liệu**: cập nhật tài liệu đang sửa (hoàn tác được bằng Ctrl+Z). **Ghép & tải về PDF**: áp dụng rồi tải luôn file PDF.
+- Chưa mở tài liệu nào: chọn các file cần ghép, bấm **Ghép PDF**, kết quả được mở trong trình chỉnh sửa.
+
+### Thanh trang (sửa nhanh)
+
+Nút **Trang** mở thanh ảnh thu nhỏ bên trái trình chỉnh sửa, để làm nhanh mà không cần mở màn hình riêng:
+
+| Việc cần làm | Cách làm |
+|---|---|
+| Chọn trang | Bấm. Ctrl + bấm: chọn thêm. Shift + bấm: chọn một dải. Ctrl+A: chọn tất cả |
+| Sắp xếp | Kéo thả ảnh thu nhỏ |
+| Xoay / Nhân bản / Thêm trang trắng / Xoá | Các nút ⟲ ⟳ ⧉ ＋ 🗑, hoặc phím Delete |
+| Trích xuất | Nút ⤓: tải các trang đang chọn thành 1 file PDF |
+| Chèn PDF | Kéo thả file PDF vào thanh trang đúng vị trí |
+
+Mọi thao tác trang đều hoàn tác được bằng Ctrl+Z. Các phần đã thêm (chữ, ảnh, highlight…) đi theo trang của nó.
+
+### Tìm kiếm
+
+Bấm **Tìm** hoặc **Ctrl+F**, rồi gõ chữ cần tìm. Các kết quả được tô vàng, kết quả đang xem tô cam.
+- **Enter** hoặc ↓: kết quả tiếp theo. **Shift+Enter** hoặc ↑: kết quả trước. **F3** cũng dùng được. **Esc**: đóng.
+- Mặc định **không phân biệt hoa/thường và dấu**: gõ `hop dong` sẽ tìm thấy “Hợp đồng”. Tick **Aa** để phân biệt hoa/thường, tick **Dấu** để phân biệt dấu.
+- Đang bôi đen một đoạn chữ rồi bấm Ctrl+F thì đoạn đó được điền sẵn vào ô tìm.
+- Trang ảnh scan không có chữ nên không tìm được.
 
 **Phím tắt**
 
@@ -186,6 +234,7 @@ Cách sửa nội dung trên bản scan: dùng **Che vùng** để che chữ cũ
 | Phím mũi tên | Dịch chuyển đối tượng (giữ Shift để dịch 10pt) |
 | Ctrl+S | Xuất PDF |
 | Ctrl+lăn chuột | Zoom |
+| Ctrl+F / F3 | Tìm kiếm / kết quả tiếp theo |
 
 **Thanh thuộc tính** (hàng thứ hai) thay đổi theo công cụ hoặc đối tượng đang chọn: màu (có các ô màu gợi ý, bấm ô vuông màu để chọn màu bất kỳ), cỡ chữ, font, độ dày nét… Nếu đang chọn một đối tượng thì thay đổi áp dụng ngay cho đối tượng đó và được ghi nhớ làm mặc định cho lần vẽ sau.
 
@@ -232,5 +281,8 @@ PDF_Editor/
 | POST | `/api/upload` | Tải PDF lên (multipart `file`), trả về `id` |
 | POST | `/api/export` | `{id, anns, name}` → PDF đã chỉnh |
 | POST | `/api/docx` | `{id, anns, applyEdits}` → .docx |
+| POST | `/api/compose` | `{pages:[{src, page, rotate}\|{blank,w,h}]}` → tài liệu mới (sắp xếp, xoá, xoay, ghép…) |
+| POST | `/api/split` | `{id, groups, anns, applyEdits}` → PDF hoặc ZIP |
+| GET | `/api/file/<id>` | Tải file PDF hiện tại trên server |
 | POST | `/api/docx2pdf` | Tải .docx lên (multipart `file`) → PDF |
 | GET | `/api/health` | Trạng thái server |

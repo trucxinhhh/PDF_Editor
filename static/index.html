@@ -4,6 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PDF Editor</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="alternate icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="theme-color" content="#2563eb">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -11,10 +16,31 @@
   <div class="group">
     <button id="btnOpen" class="primary" title="Mở file PDF">Mở PDF</button>
     <button id="btnOpenProject" title="Mở dự án đã lưu (.pdfedit.json)">Mở dự án</button>
-    <input type="file" id="filePdf" accept="application/pdf,.pdf" hidden>
+    <input type="file" id="filePdf" accept="application/pdf,.pdf" multiple hidden>
     <input type="file" id="fileProject" accept=".json" hidden>
     <input type="file" id="fileImage" accept="image/*" hidden>
     <input type="file" id="fileDocx" accept=".docx" hidden>
+    <input type="file" id="fileMerge" accept="application/pdf,.pdf" multiple hidden>
+  </div>
+
+  <div class="group">
+    <div class="dropdown" id="toolsDD">
+      <button id="btnTools" class="tools-btn" title="Tách, ghép, chèn trang PDF"><svg class="ic" viewBox="0 0 20 20"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="14.5" r="2.5"/><path d="M7.5 7l9 8M7.5 13l9-8"/></svg>Tách / Ghép ▾</button>
+      <div class="menu tool-menu">
+        <button class="tool-card" data-ws="split">
+          <span class="tc-ic split"><svg class="ic" viewBox="0 0 20 20"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="14.5" r="2.5"/><path d="M7.5 7l9 8M7.5 13l9-8"/></svg></span>
+          <span class="tc-txt"><b>Tách PDF</b><small>Cắt tài liệu thành nhiều file, trích xuất trang</small></span>
+        </button>
+        <button class="tool-card" data-ws="merge">
+          <span class="tc-ic merge"><svg class="ic" viewBox="0 0 20 20"><rect x="2.5" y="3" width="7" height="9" rx="1"/><rect x="10.5" y="8" width="7" height="9" rx="1"/><path d="M6 15v2h4"/></svg></span>
+          <span class="tc-txt"><b>Ghép / Chèn PDF</b><small>Ghép nhiều file, chèn trang, sắp xếp, xoay, xoá</small></span>
+        </button>
+      </div>
+    </div>
+    <button id="btnPages" class="toggle" title="Thanh trang: sắp xếp, xoay, xoá, thêm trang, ghép / tách PDF">
+      <svg class="ic" viewBox="0 0 20 20"><rect x="3" y="3" width="5" height="6" rx="1"/><rect x="3" y="11" width="5" height="6" rx="1"/><path d="M11 5h6M11 8h4M11 13h6M11 16h4"/></svg>Trang</button>
+    <button id="btnSearch" title="Tìm kiếm chữ (Ctrl+F)">
+      <svg class="ic" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"/><path d="M12.5 12.5L17 17"/></svg>Tìm</button>
   </div>
 
   <div class="group tools" id="tools">
@@ -133,11 +159,55 @@
   <button id="scanBannerClose" title="Đóng">×</button>
 </div>
 
+<div id="workspace">
+<aside id="sidebar" hidden tabindex="0">
+  <div class="sb-head">
+    <b>Trang</b>
+    <span id="sbInfo"></span>
+    <button id="sbClose" class="icon-btn" title="Đóng thanh trang">×</button>
+  </div>
+  <div class="sb-main">
+    <button id="sbMerge" title="Ghép thêm file PDF khác vào sau trang đang chọn (hoặc cuối tài liệu)">＋ Ghép PDF</button>
+    <button id="sbSplit" title="Tách tài liệu thành nhiều file PDF">✂ Tách PDF</button>
+  </div>
+  <div class="sb-actions">
+    <button id="sbRotL" class="icon-btn" title="Xoay trái 90°"><svg class="ic" viewBox="0 0 20 20"><path d="M4 9a6 6 0 1 1 2 5"/><path d="M4 4v5h5"/></svg></button>
+    <button id="sbRotR" class="icon-btn" title="Xoay phải 90°"><svg class="ic" viewBox="0 0 20 20"><path d="M16 9a6 6 0 1 0-2 5"/><path d="M16 4v5h-5"/></svg></button>
+    <button id="sbDup" class="icon-btn" title="Nhân bản trang"><svg class="ic" viewBox="0 0 20 20"><rect x="6" y="6" width="10" height="11" rx="1.5"/><path d="M4 13V4.5A1.5 1.5 0 0 1 5.5 3H13"/></svg></button>
+    <button id="sbBlank" class="icon-btn" title="Thêm trang trắng sau trang đang chọn"><svg class="ic" viewBox="0 0 20 20"><path d="M5 2.5h7l3.5 3.5v11.5h-10.5z"/><path d="M10 8.5v6M7 11.5h6"/></svg></button>
+    <button id="sbExtract" class="icon-btn" title="Trích xuất các trang đang chọn thành file PDF mới"><svg class="ic" viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M4 15v2h12v-2"/></svg></button>
+    <button id="sbDelete" class="icon-btn danger" title="Xoá các trang đang chọn (Delete)"><svg class="ic" viewBox="0 0 20 20"><path d="M4 6h12M8 6V4h4v2M6 6l1 11h6l1-11"/></svg></button>
+  </div>
+  <div id="thumbs"></div>
+  <div class="sb-tip">Bấm để chọn · Ctrl/Shift + bấm: chọn nhiều · Kéo để sắp xếp · Thả file PDF vào đây để chèn</div>
+</aside>
+
+<div id="viewerWrap">
+<div id="searchBar" hidden>
+  <svg class="ic" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"/><path d="M12.5 12.5L17 17"/></svg>
+  <input id="searchInput" type="search" placeholder="Tìm trong PDF…" autocomplete="off">
+  <span id="searchCount"></span>
+  <button id="searchPrev" class="icon-btn" title="Kết quả trước (Shift+Enter)">↑</button>
+  <button id="searchNext" class="icon-btn" title="Kết quả tiếp theo (Enter)">↓</button>
+  <label title="Phân biệt chữ hoa / chữ thường"><input type="checkbox" id="searchCase">Aa</label>
+  <label title="Phân biệt dấu tiếng Việt (bỏ chọn: gõ không dấu vẫn tìm được)"><input type="checkbox" id="searchAccent">Dấu</label>
+  <button id="searchClose" class="icon-btn" title="Đóng (Esc)">×</button>
+</div>
 <main id="viewer">
   <div id="dropzone">
     <div class="dz-inner">
       <h1>PDF Editor</h1>
       <p>Kéo thả file PDF vào đây hoặc bấm <b>Mở PDF</b></p>
+      <div class="dz-tools">
+        <button class="tool-card" data-start="split">
+          <span class="tc-ic split"><svg class="ic" viewBox="0 0 20 20"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="14.5" r="2.5"/><path d="M7.5 7l9 8M7.5 13l9-8"/></svg></span>
+          <span class="tc-txt"><b>Tách PDF</b><small>Chia 1 file thành nhiều file</small></span>
+        </button>
+        <button class="tool-card" data-start="merge">
+          <span class="tc-ic merge"><svg class="ic" viewBox="0 0 20 20"><rect x="2.5" y="3" width="7" height="9" rx="1"/><rect x="10.5" y="8" width="7" height="9" rx="1"/><path d="M6 15v2h4"/></svg></span>
+          <span class="tc-txt"><b>Ghép PDF</b><small>Gộp nhiều file thành 1</small></span>
+        </button>
+      </div>
       <ul>
         <li>Chèn ảnh, văn bản, highlight, che vùng, chú thích</li>
         <li>Sửa trực tiếp chữ có sẵn trong PDF</li>
@@ -148,6 +218,29 @@
   </div>
   <div id="pages"></div>
 </main>
+</div>
+</div>
+
+
+<!-- Không gian làm việc Tách / Ghép -->
+<div id="ws" hidden>
+  <header class="ws-head">
+    <button id="wsBack" class="ws-back" title="Quay lại trình chỉnh sửa (Esc)">← Quay lại</button>
+    <div class="ws-title"><span id="wsIcon" class="tc-ic"></span><div><b id="wsTitle"></b><small id="wsSub"></small></div></div>
+    <div class="ws-switch seg">
+      <button data-ws="split"><svg class="ic" viewBox="0 0 20 20"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="14.5" r="2.5"/><path d="M7.5 7l9 8M7.5 13l9-8"/></svg>Tách</button>
+      <button data-ws="merge"><svg class="ic" viewBox="0 0 20 20"><rect x="2.5" y="3" width="7" height="9" rx="1"/><rect x="10.5" y="8" width="7" height="9" rx="1"/><path d="M6 15v2h4"/></svg>Ghép / Chèn</button>
+    </div>
+  </header>
+  <div class="ws-body">
+    <div id="wsGridWrap">
+      <div id="wsHint"></div>
+      <div id="wsGrid"></div>
+    </div>
+    <aside id="wsPanel"></aside>
+  </div>
+  <input type="file" id="wsFiles" accept="application/pdf,.pdf" multiple hidden>
+</div>
 
 <footer id="status">
   <span id="hint">Mở một file PDF để bắt đầu.</span>

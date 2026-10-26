@@ -23,6 +23,7 @@ from flask import Flask, jsonify, request, send_file, send_from_directory
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("application/javascript", ".mjs")
 mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -276,9 +277,13 @@ def apply_annotations(doc, anns):
     return doc
 
 
-def build_edited_pdf(doc_id, anns):
+def build_edited_doc(doc_id, anns):
     doc = fitz.open(doc_path(doc_id))
     apply_annotations(doc, anns)
+    return doc
+
+
+def save_doc(doc):
     try:
         doc.subset_fonts()  # chỉ nhúng các ký tự đã dùng -> file nhỏ
     except Exception:
@@ -290,6 +295,17 @@ def build_edited_pdf(doc_id, anns):
     return buf
 
 
+def build_edited_pdf(doc_id, anns):
+    return save_doc(build_edited_doc(doc_id, anns))
+
+
+def store_doc(doc):
+    """Lưu tài liệu vào thư mục tạm của server, trả về id mới."""
+    doc_id = uuid.uuid4().hex
+    doc.save(os.path.join(WORK_DIR, doc_id + ".pdf"), garbage=3, deflate=True)
+    return doc_id
+
+
 def err(msg, code=400):
     return jsonify({"error": str(msg)}), code
 
@@ -298,6 +314,11 @@ def err(msg, code=400):
 @app.route("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(STATIC_DIR, "favicon.ico", mimetype="image/x-icon")
 
 
 @app.route("/static/<path:path>")
@@ -326,6 +347,114 @@ def upload():
     with open(os.path.join(WORK_DIR, doc_id + ".pdf"), "wb") as out:
         out.write(data)
     return jsonify({"id": doc_id, "pages": pages})
+
+
+@app.get("/api/file/<doc_id>")
+def get_file(doc_id):
+    try:
+        return send_file(doc_path(doc_id), mimetype="application/pdf")
+    except Exception as e:
+        return err(e, 404)
+
+
+@app.post("/api/compose")
+def compose():
+    """Dựng tài liệu mới từ danh sách trang (dùng cho sắp xếp, xoá, nhân bản, xoay, thêm trang trắng, ghép PDF).
+    pages: [{"src": <id>, "page": n, "rotate": 0|90|180|270} | {"blank": true, "w": .., "h": ..}]"""
+    body = request.get_json(force=True)
+    specs = body.get("pages") or []
+    if not specs:
+        return err("Tài liệu phải còn ít nhất 1 trang")
+    sources = {}
+    try:
+        last_use = {}
+        for i, sp in enumerate(specs):
+            if not sp.get("blank"):
+                last_use[sp["src"]] = i
+        out = fitz.open()
+        for i, sp in enumerate(specs):
+            if sp.get("blank"):
+                out.new_page(width=float(sp.get("w", 595)), height=float(sp.get("h", 842)))
+                continue
+            src_id = sp["src"]
+            if src_id not in sources:
+                sources[src_id] = fitz.open(doc_path(src_id))
+            src = sources[src_id]
+            n = int(sp["page"])
+            if not 0 <= n < src.page_count:
+                raise ValueError("Trang %d không tồn tại" % (n + 1))
+            out.insert_pdf(src, from_page=n, to_page=n, final=(last_use[src_id] == i))
+            rot = int(sp.get("rotate", 0)) % 360
+            if rot:
+                pg = out[out.page_count - 1]
+                pg.set_rotation((pg.rotation + rot) % 360)
+        new_id = store_doc(out)
+        count = out.page_count
+        out.close()
+    except Exception as e:
+        app.logger.exception("compose")
+        return err(e, 500)
+    finally:
+        for d in sources.values():
+            d.close()
+    return jsonify({"id": new_id, "pages": count})
+
+
+@app.post("/api/split")
+def split():
+    """Tách tài liệu thành nhiều file. groups: [[0,1,2],[3,4]] (chỉ số trang từ 0).
+    1 nhóm -> trả về PDF; nhiều nhóm -> trả về file ZIP."""
+    import zipfile
+    body = request.get_json(force=True)
+    groups = [g for g in (body.get("groups") or []) if g]
+    if not groups:
+        return err("Chưa chọn trang nào")
+    base = (body.get("name") or "document").rsplit(".", 1)[0]
+    try:
+        src = build_edited_doc(body.get("id"), body.get("anns", []) if body.get("applyEdits", True) else [])
+        n = src.page_count
+        files = []
+        for g in groups:
+            pages = [int(p) for p in g]
+            if any(p < 0 or p >= n for p in pages):
+                raise ValueError("Có số trang vượt quá tài liệu (%d trang)" % n)
+            out = fitz.open()
+            for k, p in enumerate(pages):
+                out.insert_pdf(src, from_page=p, to_page=p, final=(k == len(pages) - 1))
+            label = _page_label(pages)
+            files.append(("%s_trang_%s.pdf" % (base, label), save_doc(out).getvalue()))
+        src.close()
+    except Exception as e:
+        app.logger.exception("split")
+        return err(e, 500)
+    if len(files) == 1:
+        return send_file(io.BytesIO(files[0][1]), mimetype="application/pdf", as_attachment=True,
+                         download_name=files[0][0])
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as z:
+        used = set()
+        for name, data in files:
+            nm, k = name, 2
+            while nm in used:
+                nm = name[:-4] + "_%d.pdf" % k
+                k += 1
+            used.add(nm)
+            z.writestr(nm, data)
+    zbuf.seek(0)
+    return send_file(zbuf, mimetype="application/zip", as_attachment=True, download_name=base + "_tach.zip")
+
+
+def _page_label(pages):
+    """[0,1,2,4] -> '1-3_5'"""
+    parts, start, prev = [], None, None
+    for p in pages + [None]:
+        if p is not None and prev is not None and p == prev + 1:
+            prev = p
+            continue
+        if start is not None:
+            parts.append(str(start + 1) if start == prev else "%d-%d" % (start + 1, prev + 1))
+        start = prev = p
+    return "_".join(parts)
 
 
 @app.post("/api/export")
@@ -423,6 +552,28 @@ def docx_to_pdf():
         shutil.rmtree(tmpdir, ignore_errors=True)
     name = (f.filename or "document").rsplit(".", 1)[0] + ".pdf"
     return send_file(data, mimetype="application/pdf", as_attachment=True, download_name=name)
+
+
+@app.post("/api/fetch-image")
+def fetch_image():
+    """Tải hộ ảnh từ một đường dẫn web (khi kéo ảnh từ trang web khác vào, trình duyệt bị chặn CORS)."""
+    import urllib.request
+    url = str((request.get_json(force=True) or {}).get("url", ""))
+    if not url.lower().startswith(("http://", "https://")):
+        return err("Đường dẫn ảnh không hợp lệ")
+    limit = 25 * 1024 * 1024
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (PDF Editor)"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            ctype = r.headers.get_content_type()
+            data = r.read(limit + 1)
+    except Exception as e:
+        return err("Không tải được ảnh: %s" % e, 502)
+    if len(data) > limit:
+        return err("Ảnh quá lớn (> 25 MB)")
+    if not ctype.startswith("image/"):
+        return err("Đường dẫn không phải là ảnh")
+    return send_file(io.BytesIO(data), mimetype=ctype)
 
 
 @app.get("/api/health")
