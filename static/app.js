@@ -1926,7 +1926,7 @@ document.addEventListener('keydown', (e) => {
    KHÔNG GIAN LÀM VIỆC TÁCH / GHÉP PDF
    (chọn tính năng -> màn hình riêng: lưới trang, cắt bằng ✂, kéo thả…)
    ===================================================================== */
-const GROUP_COLORS = ['#2563eb', '#d93025', '#1e8e3e', '#f29900', '#8e24aa', '#00897b', '#d81b60', '#5d4037', '#3949ab', '#00acc1'];
+const GROUP_COLORS = ['#3B7597', '#e5484d', '#12a594', '#f5a524', '#8e4ec6', '#093C5D', '#d6409f', '#2fb8c2', '#a16207', '#4f46e5'];
 const IC = {
   sc: '<svg class="ic" viewBox="0 0 20 20"><circle cx="5.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="14.5" r="2.5"/><path d="M7.5 7l9 8M7.5 13l9-8"/></svg>',
   mg: '<svg class="ic" viewBox="0 0 20 20"><rect x="2.5" y="3" width="7" height="9" rx="1"/><rect x="10.5" y="8" width="7" height="9" rx="1"/><path d="M6 15v2h4"/></svg>',
