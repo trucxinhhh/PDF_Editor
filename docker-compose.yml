@@ -1,0 +1,23 @@
+services:
+  pdf-editor:
+    build:
+      context: .
+      args:
+        WITH_LIBREOFFICE: "true"   # "false" để image nhẹ hơn (tắt Word -> PDF)
+    image: pdf-editor:latest
+    container_name: pdf-editor
+    ports:
+      # Chỉ máy này truy cập được. Muốn máy khác trong mạng LAN dùng: đổi thành "5000:5000"
+      - "127.0.0.1:5000:5000"
+    environment:
+      KEEP_HOURS: "24"          # file tạm trên server tự xoá sau N giờ
+      GUNICORN_WORKERS: "2"
+      GUNICORN_THREADS: "4"
+    volumes:
+      - pdf-data:/data
+      # Dùng font riêng (sans.ttf, sans-bold.ttf, serif.ttf, serif-bold.ttf):
+      # - ./fonts:/app/fonts:ro
+    restart: unless-stopped
+
+volumes:
+  pdf-data:

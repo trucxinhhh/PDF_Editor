@@ -1,0 +1,13 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+*.pdfedit.json
+*.pdf
+*.docx
+run.bat
+run.sh
+Dockerfile
+docker-compose.yml
+.dockerignore

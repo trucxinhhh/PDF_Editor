@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Editor</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="toolbar">
+  <div class="group">
+    <button id="btnOpen" class="primary" title="Mở file PDF">Mở PDF</button>
+    <button id="btnOpenProject" title="Mở dự án đã lưu (.pdfedit.json)">Mở dự án</button>
+    <input type="file" id="filePdf" accept="application/pdf,.pdf" hidden>
+    <input type="file" id="fileProject" accept=".json" hidden>
+    <input type="file" id="fileImage" accept="image/*" hidden>
+    <input type="file" id="fileDocx" accept=".docx" hidden>
+  </div>
+
+  <div class="group tools" id="tools">
+    <button data-tool="select" class="active" title="Chọn / di chuyển, bôi đen chữ để copy (V)">Chọn</button>
+    <button data-tool="text" title="Chèn văn bản: bấm vào trang (T)">Văn bản</button>
+    <button data-tool="image" title="Chèn ảnh đè lên trang (I)">Ảnh</button>
+    <button data-tool="highlight" title="Highlight: kéo chuột, hoặc bôi đen chữ rồi bấm nút này (H)">Highlight</button>
+    <button data-tool="whiteout" title="Che trắng / che màu một vùng (W)">Che vùng</button>
+    <button data-tool="comment" title="Chú thích (sticky note): bấm vào trang (C)">Chú thích</button>
+    <button data-tool="edit" title="Sửa chữ gốc: bấm vào dòng chữ có sẵn trong PDF (E)">Sửa chữ gốc</button>
+  </div>
+
+  <div class="group props" id="props">
+    <label title="Màu">Màu <input type="color" id="propColor" value="#000000"></label>
+    <label title="Cỡ chữ">Cỡ <input type="number" id="propSize" value="14" min="4" max="200" step="1"></label>
+    <select id="propFont" title="Font">
+      <option value="sans">Arial</option>
+      <option value="serif">Times New Roman</option>
+    </select>
+    <button id="propBold" class="toggle" title="In đậm"><b>B</b></button>
+    <label title="Độ trong suốt (highlight)" id="opacityWrap">Mờ <input type="range" id="propOpacity" min="0.1" max="1" step="0.05" value="0.4"></label>
+    <label title="Khi sửa chữ gốc: tô nền trắng thay vì giữ nền" id="whiteBgWrap"><input type="checkbox" id="propWhiteBg"> Nền trắng</label>
+  </div>
+
+  <div class="group">
+    <button id="btnUndo" title="Hoàn tác (Ctrl+Z)">↶</button>
+    <button id="btnRedo" title="Làm lại (Ctrl+Y)">↷</button>
+    <button id="btnDelete" title="Xoá đối tượng đang chọn (Delete)">Xoá</button>
+  </div>
+
+  <div class="group">
+    <button id="zoomOut" title="Thu nhỏ">−</button>
+    <span id="zoomLabel">100%</span>
+    <button id="zoomIn" title="Phóng to">+</button>
+  </div>
+
+  <div class="group right">
+    <button id="btnSaveProject" title="Lưu toàn bộ (PDF gốc + phần đã thêm) để mở lại sửa tiếp">Lưu dự án</button>
+    <div class="dropdown">
+      <button id="btnWord" title="Chuyển đổi Word">Word ▾</button>
+      <div class="menu" id="wordMenu">
+        <button data-docx="orig">PDF gốc → Word (.docx)</button>
+        <button data-docx="edited">PDF đã chỉnh → Word (.docx)</button>
+        <hr>
+        <button id="btnDocx2Pdf">Word (.docx) → PDF…</button>
+      </div>
+    </div>
+    <button id="btnExport" class="primary" title="Xuất PDF mới (Ctrl+S)">Xuất PDF</button>
+  </div>
+</header>
+
+<main id="viewer">
+  <div id="dropzone">
+    <div class="dz-inner">
+      <h1>PDF Editor</h1>
+      <p>Kéo thả file PDF vào đây hoặc bấm <b>Mở PDF</b></p>
+      <ul>
+        <li>Chèn ảnh, văn bản, highlight, che vùng, chú thích</li>
+        <li>Sửa trực tiếp chữ có sẵn trong PDF</li>
+        <li>Bôi đen để copy chữ, Ctrl+C / Ctrl+V để nhân bản đối tượng, dán ảnh từ clipboard</li>
+        <li>Xuất PDF mới, chuyển PDF ⇄ Word</li>
+      </ul>
+    </div>
+  </div>
+  <div id="pages"></div>
+</main>
+
+<footer id="status">
+  <span id="hint">Mở một file PDF để bắt đầu.</span>
+  <span id="pageInfo"></span>
+</footer>
+
+<div id="busy" hidden><div class="spinner"></div><span id="busyText">Đang xử lý…</span></div>
+<div id="toast" hidden></div>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
