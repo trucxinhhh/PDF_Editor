@@ -1,4 +1,5 @@
 import * as pdfjsLib from './lib/pdf.min.mjs';
+import { tr, initI18n, setLang } from './i18n.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/lib/pdf.worker.min.mjs';
 
@@ -40,7 +41,7 @@ const PALETTES = {
 PALETTES.edit = PALETTES.text;
 PALETTES.shape = PALETTES.text;
 const KIND_LABEL = { text: 'Văn bản', edit: 'Sửa chữ gốc', highlight: 'Highlight', whiteout: 'Che vùng', comment: 'Chú thích',
-  shape: 'Hình', image: 'Ảnh' };
+  shape: 'Hình', image: 'Ảnh', eraser: 'Gôm' };
 const SHAPE_LABEL = { rect: 'Hình chữ nhật', ellipse: 'Hình elip', line: 'Đường thẳng', arrow: 'Mũi tên', pen: 'Bút vẽ' };
 const measureCtx = document.createElement('canvas').getContext('2d');
 const els = new Map();   // ann.id -> element
@@ -53,6 +54,7 @@ const HINTS = {
   text: 'Văn bản: bấm vào vị trí trên trang rồi gõ chữ. Enter để xuống dòng, Esc để xong.',
   image: 'Ảnh: chọn file ảnh rồi bấm vào trang để đặt. Có thể dán ảnh trực tiếp bằng Ctrl+V.',
   highlight: 'Highlight: kéo trên chữ để tô theo dòng (tự bắt theo từng ký tự), bấm 1 lần vào dòng để tô cả dòng. Kéo ở vùng trống để tô vùng tự do.',
+  eraser: 'Gôm: bấm vào hoặc kéo qua các phần đã thêm / đã sửa để xoá chúng. Ctrl+Z để lấy lại.',
   shape: 'Hình: chọn loại hình ở thanh bên dưới rồi kéo chuột trên trang. Giữ Shift để vẽ hình vuông/tròn hoặc đường thẳng góc 45°.',
   whiteout: 'Che vùng: kéo chuột để che nội dung (đổi màu ở ô Màu).',
   comment: 'Chú thích: bấm vào trang để thêm ghi chú (sticky note, hiện trong Acrobat/Foxit).',
@@ -152,7 +154,7 @@ async function openPdfFile(file) { return openPdfFiles([file]); }
 async function openPdfFiles(files) {
   files = [...files].filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
   if (!files.length) return;
-  if (state.dirty && !confirm('Các thay đổi chưa lưu sẽ mất. Tiếp tục mở file mới?')) return;
+  if (state.dirty && !confirm(tr('Các thay đổi chưa lưu sẽ mất. Tiếp tục mở file mới?'))) return;
   if (files.length === 1) return openPdfBytes(new Uint8Array(await files[0].arrayBuffer()), files[0].name);
   busy(true, `Đang ghép ${files.length} file PDF…`);
   try {
@@ -580,6 +582,7 @@ function wireAnn(el, id) {
     if (state.editing === id) { e.stopPropagation(); return; }
     e.stopPropagation(); e.preventDefault();
     finishEditing();
+    if (state.tool === 'eraser') { startErase(e); return; }
     select(id);
     if (e.target.classList.contains('handle')) startResize(e, el, a);
     else startMove(e, el, a);
@@ -763,6 +766,9 @@ function onOverlayDown(e, p) {
       break;
     case 'shape':
       drawShape(e, p, pt);
+      break;
+    case 'eraser':
+      startErase(e);
       break;
   }
 }
@@ -1104,7 +1110,7 @@ function defaultsFor(kind) { return state.defaults[kind === 'edit' ? 'text' : ki
 function propTarget() {
   const a = state.sel && findAnn(state.sel);
   if (a) return { kind: a.type, ann: a, obj: a };
-  const kind = { text: 'text', edit: 'edit', highlight: 'highlight', whiteout: 'whiteout', comment: 'comment', shape: 'shape' }[state.tool] || null;
+  const kind = { text: 'text', edit: 'edit', highlight: 'highlight', whiteout: 'whiteout', comment: 'comment', shape: 'shape', eraser: 'eraser' }[state.tool] || null;
   return { kind, ann: null, obj: kind ? defaultsFor(kind) : null };
 }
 function renderSwatches(sel, colors, current, onPick) {
@@ -1206,7 +1212,7 @@ async function toDocx(applyEdits) {
   if (!state.docId) return;
   finishEditing();
   if (scannedPages().length &&
-      !confirm('PDF này có trang là ảnh scan (không có chữ thật). File Word tạo ra sẽ chỉ chứa hình ảnh của trang, không sửa chữ được. Vẫn tiếp tục?')) return;
+      !confirm(tr('PDF này có trang là ảnh scan (không có chữ thật). File Word tạo ra sẽ chỉ chứa hình ảnh của trang, không sửa chữ được. Vẫn tiếp tục?'))) return;
   busy(true, 'Đang chuyển sang Word… (file lớn có thể mất vài phút)');
   try {
     const r = await api('/api/docx', { id: state.docId, anns: state.anns, name: state.name, applyEdits });
@@ -1223,8 +1229,8 @@ async function docxToPdf(file) {
     const name = file.name.replace(/\.docx$/i, '') + '.pdf';
     download(blob, name);
     busy(false);
-    if (confirm('Đã chuyển xong. Mở PDF này trong trình chỉnh sửa?')) {
-      if (state.dirty && !confirm('Các thay đổi chưa lưu ở file hiện tại sẽ mất. Tiếp tục?')) return;
+    if (confirm(tr('Đã chuyển xong. Mở PDF này trong trình chỉnh sửa?'))) {
+      if (state.dirty && !confirm(tr('Các thay đổi chưa lưu ở file hiện tại sẽ mất. Tiếp tục?'))) return;
       await openPdfBytes(new Uint8Array(await blob.arrayBuffer()), name);
     }
   } catch (e) { toast(e.message, true, 9000); }
@@ -1320,7 +1326,7 @@ document.addEventListener('keydown', (e) => {
     shiftAnn(a, dx, dy);
     updateAnnEl(a); return;
   }
-  const map = { v: 'select', t: 'text', i: 'image', h: 'highlight', s: 'shape', w: 'whiteout', c: 'comment', e: 'edit' };
+  const map = { v: 'select', t: 'text', i: 'image', h: 'highlight', s: 'shape', w: 'whiteout', c: 'comment', e: 'edit', x: 'eraser' };
   if (map[k] && state.pdf) setTool(map[k]);
 });
 
@@ -2190,7 +2196,7 @@ function mergeRenderGrid() {
           <button data-act="dup" title="Nhân bản">${IC.dup}</button>
           <button data-act="del" class="del" title="Xoá trang">${IC.del}</button>
         </div>
-        <div class="ws-thumb${it.blank ? ' blank' : ''}"></div>
+        <div class="ws-thumb${it.blank ? ' blank' : ''}" data-label="${tr('Trang trắng')}"></div>
         <div class="ws-num"><b>${idx + 1}</b> · ${label}</div>
         <div class="ws-src" style="background:${src ? src.color : '#cbd2dd'}"></div>
       </div>`;
@@ -2207,7 +2213,7 @@ function mergeRenderGrid() {
     }
     const gap = document.createElement('div');
     gap.className = 'ws-gap';
-    if (M.sel === it.uid) gap.innerHTML = '<div class="ws-insert-mark"></div>';
+    if (M.sel === it.uid) gap.innerHTML = `<div class="ws-insert-mark" data-label="${tr('Chèn vào đây')}"></div>`;
     cell.appendChild(gap);
     grid.appendChild(cell);
   });
@@ -2466,3 +2472,56 @@ function wsKeydown(e) {
   if ((e.ctrlKey || e.metaKey) && ['f', 's', 'z', 'y', 'o'].includes(e.key.toLowerCase())) e.preventDefault();
 }
 ['paste', 'copy', 'cut'].forEach((ev) => document.addEventListener(ev, (e) => { if (!$('#ws').hidden && !isTyping(e.target)) e.stopImmediatePropagation(); }, true));
+
+/* ------------------------------------------------------------------ ngôn ngữ */
+document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => setLang(b.dataset.lang)));
+initI18n();
+
+/* =====================================================================
+   GÔM: bấm hoặc kéo qua các phần đã thêm / đã sửa để xoá
+   ===================================================================== */
+function startErase(e) {
+  finishEditing();
+  const snap = clone(state.anns);
+  const erased = new Set();
+  const hitAt = (x, y) => {
+    for (const el of document.elementsFromPoint(x, y)) {
+      const annEl = el.closest && el.closest('.ann');
+      if (annEl && annEl.dataset.id && !erased.has(annEl.dataset.id)) {
+        erased.add(annEl.dataset.id);
+        annEl.classList.add('erasing');
+        const a = findAnn(annEl.dataset.id);
+        if (a && a.type === 'edit' && annEl._cover) annEl._cover.classList.add('erasing');
+      }
+    }
+  };
+  let lx = e.clientX, ly = e.clientY;
+  hitAt(lx, ly);
+  const move = (ev) => {
+    const dx = ev.clientX - lx, dy = ev.clientY - ly, steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 4));
+    for (let k = 1; k <= steps; k++) hitAt(lx + dx * k / steps, ly + dy * k / steps);
+    lx = ev.clientX; ly = ev.clientY;
+  };
+  const up = () => {
+    document.removeEventListener('pointermove', move, true);
+    document.removeEventListener('pointerup', up, true);
+    if (!erased.size) return;
+    pushHistory(snap);
+    for (const id of erased) deleteAnn(id, false);
+    toast(`Đã xoá ${erased.size} phần (Ctrl+Z để hoàn tác)`, false, 2200);
+  };
+  document.addEventListener('pointermove', move, true);
+  document.addEventListener('pointerup', up, true);
+}
+function eraseAll(onlyPage) {
+  const p = currentPageIndex();
+  const targets = state.anns.filter((a) => !onlyPage || a.page === p);
+  if (!targets.length) { toast(onlyPage ? 'Trang này chưa có phần nào được thêm / sửa.' : 'Chưa có phần nào được thêm / sửa.'); return; }
+  const msg = onlyPage ? `Xoá ${targets.length} phần đã thêm / sửa trên trang ${p + 1}?` : `Xoá tất cả ${targets.length} phần đã thêm / sửa trên mọi trang?`;
+  if (!confirm(tr(msg))) return;
+  pushHistory();
+  for (const a of targets) deleteAnn(a.id, false);
+  toast(`Đã xoá ${targets.length} phần (Ctrl+Z để hoàn tác)`, false, 2500);
+}
+$('#eraseAllPage').onclick = () => eraseAll(true);
+$('#eraseAllDoc').onclick = () => eraseAll(false);

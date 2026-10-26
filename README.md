@@ -16,6 +16,8 @@ Mở một file PDF và bạn có thể:
 - **Quản lý trang**: sắp xếp (kéo thả), xoay, xoá, nhân bản, thêm trang trắng
 - **Ghép PDF** (nhiều file thành một) và **tách PDF** (theo trang chọn, theo khoảng, hoặc cứ mỗi N trang)
 - **Tìm kiếm chữ** (Ctrl+F), gõ không dấu vẫn tìm được chữ có dấu
+- **Gôm**: bấm hoặc kéo qua để xoá các phần đã thêm / đã sửa
+- **Giao diện Tiếng Việt / English** (nút VI | EN góc trên bên phải)
 - **Xuất PDF mới**, trong đó mọi phần đã thêm được giữ nguyên
 - **Lưu dự án** (`.pdfedit.json`) để mở lại và sửa tiếp các phần đã thêm
 - **PDF → Word (.docx)** giữ bố cục để sửa chữ trực tiếp trong Word, và **Word → PDF**
@@ -176,6 +178,7 @@ Cách sửa nội dung trên bản scan: dùng **Che vùng** để che chữ cũ
 | **Hình** (S) | Chọn loại hình ở thanh thuộc tính: ▭ chữ nhật, ◯ elip, ╱ đường thẳng, ↗ mũi tên, ✎ bút vẽ. Kéo chuột trên trang để vẽ. Giữ Shift để vẽ hình vuông/tròn hoặc đường thẳng góc 45°. Chỉnh được màu nét, màu nền (ô gạch đỏ = không tô nền), độ dày nét, độ đậm. |
 | **Che vùng** (W) | Kéo chuột để che nội dung. |
 | **Chú thích** (C) | Bấm vào trang để thêm ghi chú. |
+| **Gôm** (X) | Bấm vào hoặc kéo chuột qua các phần đã thêm / đã sửa (chữ, ảnh, hình, highlight, che vùng, chú thích, chữ đã sửa) để xoá. Xoá một chỗ “Sửa chữ gốc” thì chữ gốc hiện lại. Nút “Xoá hết trên trang này” / “Xoá hết mọi trang” để xoá nhanh. Lỡ tay thì bấm Ctrl+Z. |
 | **Sửa chữ gốc** (E) | Bấm vào dòng chữ có khung xanh để sửa. Tick “Nền trắng” nếu muốn tô trắng vùng chữ cũ. Không dùng được với PDF ảnh scan (xem mục 3). |
 
 ### Tách PDF & Ghép / Chèn PDF
@@ -223,6 +226,10 @@ Bấm **Tìm** hoặc **Ctrl+F**, rồi gõ chữ cần tìm. Các kết quả �
 - Đang bôi đen một đoạn chữ rồi bấm Ctrl+F thì đoạn đó được điền sẵn vào ô tìm.
 - Trang ảnh scan không có chữ nên không tìm được.
 
+### Ngôn ngữ
+
+Bấm **VI | EN** ở góc phải thanh công cụ để chuyển giao diện giữa Tiếng Việt và English. Lựa chọn được nhớ cho lần mở sau, trên từng máy. Bản dịch nằm trong `static/i18n.js`: muốn sửa câu chữ tiếng Anh thì sửa trong file này.
+
 **Phím tắt**
 
 | Phím | Tác dụng |
@@ -263,6 +270,7 @@ PDF_Editor/
 ├── static/
 │   ├── index.html       Giao diện
 │   ├── app.js           Logic chỉnh sửa (pdf.js)
+│   ├── i18n.js          Bản dịch Tiếng Việt / English
 │   ├── style.css
 │   └── lib/             pdf.js (Mozilla, Apache-2.0)
 ├── fonts/               Font tuỳ chọn
