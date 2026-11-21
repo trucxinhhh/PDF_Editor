@@ -123,17 +123,7 @@ Muốn dùng font khác, đặt file vào thư mục `fonts/` với tên `sans.t
 
 Máy không kết nối được Docker Hub để tải image gốc `python`. Đây là lỗi mạng (hay gặp với một số nhà mạng hoặc khi dùng IPv6), không phải lỗi code. Có thể thử lần lượt:
 
-1. **Dùng bản mirror của Google** (không cần Docker Hub). Trong PowerShell:
-   ```powershell
-   $env:BASE_IMAGE="mirror.gcr.io/library/python:3.12-slim-bookworm"
-   docker compose up -d --build
-   ```
-   Muốn lần sau không phải gõ lại: tạo file `.env` cạnh `docker-compose.yml` với nội dung
-   ```
-   BASE_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm
-   ```
-   Nếu chạy bằng lệnh docker thuần:
-   `docker build --build-arg BASE_IMAGE=mirror.gcr.io/library/python:3.12-slim-bookworm -t pdf-editor .`
+1. Từ phiên bản này, image gốc **mặc định đã lấy từ mirror của Google** (`mirror.gcr.io`), không cần Docker Hub. Nếu vẫn lỗi `docker.io`, kiểm tra xem trong thư mục có file `.env` đặt `BASE_IMAGE=python:...` hay không, có thì xoá dòng đó đi. Muốn quay lại dùng Docker Hub thì đặt `BASE_IMAGE=python:3.12-slim-bookworm` trong file `.env`.
 2. **Thêm mirror cho Docker Desktop**: vào Settings → Docker Engine, thêm `"registry-mirrors": ["https://mirror.gcr.io"]` vào JSON, bấm *Apply & restart*.
 3. **Đổi DNS / tắt IPv6**: đặt DNS của máy thành `8.8.8.8` và `1.1.1.1`, hoặc tắt IPv6 trên card mạng rồi thử lại. Cũng có thể đổi mạng khác (4G, VPN).
 4. Thử tải riêng image gốc để kiểm tra: `docker pull python:3.12-slim-bookworm`.
